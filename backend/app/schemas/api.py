@@ -99,6 +99,9 @@ class TrainRequest(BaseModel):
     drop_outliers: bool = Field(
         False, description="Remove rows outside 1.5xIQR on a numeric column before training"
     )
+    tune: bool = Field(
+        False, description="Run a randomised hyperparameter search on the winning model"
+    )
 
 
 class ModelResultOut(BaseModel):

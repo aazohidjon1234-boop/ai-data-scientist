@@ -318,10 +318,19 @@ export interface ImproveRecipe {
   best_model: string | null;
   rows_used: number;
   features_used: number;
-  changes: { features: string[] | null; drop_outliers: boolean };
+  changes: { features: string[] | null; drop_outliers: boolean; tune?: boolean };
+  params?: Record<string, unknown>;
 }
 
 export interface ImproveResult {
+  tuning?: {
+    model: string;
+    params: Record<string, unknown>;
+    cv_score: number;
+    metric: string;
+    iterations: number;
+    folds: number;
+  } | null;
   target: string;
   problem_type: ProblemType;
   metric: string;

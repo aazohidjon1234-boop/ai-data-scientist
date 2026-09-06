@@ -173,4 +173,5 @@ def improvements(db: Session, dataset_id: str, target: str | None,
         df, chosen, kind,
         current_features=prep.get("selected_by_user"),
         current_drops_outliers=bool((run.get("run_info") or {}).get("outliers_dropped")),
+        current_best_model=run.get("best_model"),
     )

@@ -209,7 +209,8 @@ def train(dataset_id: str, body: TrainRequest | None = None, db: Session = Depen
     result = ml_service.run_training(db, dataset_id, target=body.target,
                                      problem_type=body.problem_type, k_range=k,
                                      features=body.features,
-                                     drop_outliers=body.drop_outliers)
+                                     drop_outliers=body.drop_outliers,
+                                     tune=body.tune)
     db.refresh(ds)
     return _training_out(db, ds)
 

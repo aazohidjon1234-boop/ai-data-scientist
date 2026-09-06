@@ -879,3 +879,10 @@ def coerce_numeric_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
             out[column] = parsed
             converted.append(str(column))
     return out, converted
+
+
+def model_factory(problem_type: str, model_name: str) -> Callable[[], Any] | None:
+    """The constructor a model name maps to, for callers that need a fresh
+    estimator (hyperparameter search) rather than a fitted one."""
+    registry = REGRESSION_MODELS if problem_type == "regression" else CLASSIFICATION_MODELS
+    return registry.get(model_name)

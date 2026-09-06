@@ -172,6 +172,7 @@ class DataScientistAgent:
         k_range: tuple[int, int] | None = None,
         features: list[str] | None = None,
         drop_outliers: bool = False,
+        tune: bool = False,
     ) -> dict[str, Any]:
         settings = self.settings
         trace = AgentTrace()
@@ -380,6 +381,47 @@ class DataScientistAgent:
                         "training_seconds": 0.0,
                     })
             comparison = data_tools.compare_models(results, ptype)
+
+            # Optionally refine the winner. Only the winner: searching all 22
+            # would cost more than the rest of the pipeline combined, and a
+            # tuned also-ran rarely overtakes a well-fitted leader.
+            if tune and ptype != "clustering":
+                from .tuner import is_tunable, tune_model
+
+                champion = comparison.get("best")
+                if champion and is_tunable(champion):
+                    with self._step(trace, "train_model",
+                                    {"purpose": "hyperparameter search", "model": champion}) as t:
+                        found = tune_model(X_train, y_train, ptype, champion)
+                        if found:
+                            factory = data_tools.model_factory(ptype, champion)
+                            candidate = factory().set_params(**found["params"])
+                            candidate.fit(X_train, y_train)
+                            metrics = data_tools.evaluate_model(
+                                candidate, champion, ptype,
+                                X_train, X_test, y_train, y_test,
+                                prep_report.get("class_labels"),
+                            )
+                            entry = next((r for r in results if r["name"] == champion), None)
+                            key = metrics.get("primary_metric")
+                            before = (entry or {}).get("metrics", {}).get(key)
+                            after = metrics.get(key)
+                            # Keep the tuned model only if it really is better on
+                            # the held-out split, not merely on the search folds.
+                            if entry and before is not None and after is not None and after > before:
+                                entry["metrics"] = metrics
+                                entry["tuned_params"] = found["params"]
+                                comparison = data_tools.compare_models(results, ptype)
+                                tuning_report = {"model": champion, "params": found["params"],
+                                                 "before": before, "after": after, "applied": True}
+                                t.ok(f"Tuned {champion}: {key} {before:.4f} -> {after:.4f}")
+                            else:
+                                tuning_report = {"model": champion, "params": found["params"],
+                                                 "before": before, "after": after, "applied": False}
+                                t.ok(f"Search found nothing better than the defaults for {champion}")
+                            run_info["tuning"] = tuning_report
+                        else:
+                            t.ok(f"{champion} has no tunable parameters configured")
 
         # feature importance for the best model (retrain cheaply in-memory is not possible;
         # we already trained — retrieve from a fresh fit on train split for tree/linear models)

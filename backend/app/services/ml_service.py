@@ -25,6 +25,7 @@ def run_training(
     k_range: tuple[int, int] | None = None,
     features: list[str] | None = None,
     drop_outliers: bool = False,
+    tune: bool = False,
 ) -> dict[str, Any]:
     ds = get_dataset_or_404(db, dataset_id)
     df = load_csv_cached(ds.file_path)
@@ -43,7 +44,8 @@ def run_training(
     progress.start(ds.id, "training", stages)
     try:
         result = agent.train(target=target, problem_type=problem_type, k_range=k_range,
-                             features=features, drop_outliers=drop_outliers)
+                             features=features, drop_outliers=drop_outliers,
+                             tune=tune)
     except Exception as exc:
         progress.finish(ds.id, error=type(exc).__name__)
         raise

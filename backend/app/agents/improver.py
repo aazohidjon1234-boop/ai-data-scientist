@@ -25,6 +25,7 @@ from ..exceptions import ValidationError
 from ..tools.data_tools import prepare_features
 from ..utils.jsonutils import to_jsonable
 from .feature_advisor import suggest_features
+from .tuner import is_tunable, tune_model
 
 EVAL_ROWS = 4_000
 EVAL_FOLDS = 3
@@ -103,6 +104,7 @@ def suggest_improvements(
     problem_type: str,
     current_features: list[str] | None = None,
     current_drops_outliers: bool = False,
+    current_best_model: str | None = None,
 ) -> dict[str, Any]:
     """Compare options against the run the user actually has.
 
@@ -170,6 +172,37 @@ def suggest_improvements(
                 "Both changes together.", trimmed, selected,
                 {"features": selected, "drop_outliers": True})
 
+    # Tuning the winner, measured on the same folds as everything else.
+    tuning: dict[str, Any] | None = None
+    if current_best_model and is_tunable(current_best_model):
+        try:
+            frame = baseline_frame
+            if len(frame) > EVAL_ROWS:
+                frame = frame.sample(n=EVAL_ROWS, random_state=get_settings().random_state)
+            X, y, _ = prepare_features(frame, target, problem_type, baseline_features)
+            tuning = tune_model(X, y, problem_type, current_best_model)
+        except Exception:
+            tuning = None
+    if tuning:
+        recipes.append({
+            "key": "tuned",
+            "label": f"Tune {current_best_model}",
+            "why": (
+                f"Randomised search over {tuning['iterations']} parameter combinations "
+                f"for the model that currently wins."
+            ),
+            "score": tuning["cv_score"],
+            "best_model": current_best_model,
+            "rows_used": int(len(baseline_frame)),
+            "features_used": len(baseline_features),
+            "changes": {
+                "features": current_features,
+                "drop_outliers": current_drops_outliers,
+                "tune": True,
+            },
+            "params": tuning["params"],
+        })
+
     scored = [r for r in recipes if r["score"] is not None]
     baseline = next((r for r in recipes if r["key"] == "baseline"), None)
     base_score = baseline["score"] if baseline else None
@@ -205,6 +238,7 @@ def suggest_improvements(
                        and base_score is not None
                        and (best["score"] - base_score) >= MEANINGFUL_GAIN else "baseline",
         "recipes": recipes,
+        "tuning": tuning,
         "outliers": {
             "rows_flagged": removed,
             "pct": round(loss * 100, 2),
@@ -214,5 +248,6 @@ def suggest_improvements(
             ),
         },
         "summary": summary,
-        "tools_used": ["detect_outliers", "mutual_information", "cross_val_score"],
+        "tools_used": ["detect_outliers", "mutual_information", "cross_val_score",
+                       "randomized_search"],
     })

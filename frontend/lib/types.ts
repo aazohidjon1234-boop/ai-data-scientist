@@ -324,11 +324,13 @@ export interface ImproveRecipe {
     tune?: boolean;
     impute_numeric?: string;
     impute_categorical?: string;
+    engineered?: Record<string, unknown>[] | null;
   };
   params?: Record<string, unknown>;
 }
 
 export interface ImproveResult {
+  engineered?: { name: string; kind: string; a: string; b: string; relevance: number }[];
   imputation?: {
     numeric: string;
     categorical: string;

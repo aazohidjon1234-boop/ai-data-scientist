@@ -25,6 +25,7 @@ from ..exceptions import ValidationError
 from ..tools.data_tools import prepare_features
 from ..utils.jsonutils import to_jsonable
 from .feature_advisor import suggest_features
+from .feature_engineer import build_features, propose
 from .tuner import is_tunable, tune_model
 
 EVAL_ROWS = 4_000
@@ -109,6 +110,7 @@ def suggest_improvements(
     current_best_model: str | None = None,
     current_impute_numeric: str = "median",
     current_impute_categorical: str = "mode",
+    current_engineered: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Compare options against the run the user actually has.
 
@@ -202,6 +204,25 @@ def suggest_improvements(
                  "impute_numeric": current_impute_numeric, "impute_categorical": "constant"},
                 impute=(current_impute_numeric, "constant"))
 
+    # Derived columns: only proposed when none are in play yet, so applying the
+    # recipe does not offer to build the same interactions a second time.
+    engineered_specs: list[dict[str, Any]] = []
+    if not current_engineered:
+        try:
+            engineered_specs = propose(baseline_frame, target, problem_type, baseline_features)
+        except Exception:
+            engineered_specs = []
+    if engineered_specs:
+        built, added = build_features(baseline_frame, engineered_specs)
+        if added:
+            add("engineered", f"Add {len(added)} derived column(s)",
+                "Interactions a model cannot see on its own — "
+                + ", ".join(added[:3]) + (" …" if len(added) > 3 else "") + ".",
+                built, baseline_features + added,
+                {"features": (current_features + added) if current_features else None,
+                 "drop_outliers": current_drops_outliers,
+                 "engineered": engineered_specs})
+
     # Tuning the winner, measured on the same folds as everything else.
     tuning: dict[str, Any] | None = None
     if current_best_model and is_tunable(current_best_model):
@@ -269,6 +290,7 @@ def suggest_improvements(
                        and (best["score"] - base_score) >= MEANINGFUL_GAIN else "baseline",
         "recipes": recipes,
         "tuning": tuning,
+        "engineered": engineered_specs,
         "imputation": {
             "numeric": current_impute_numeric,
             "categorical": current_impute_categorical,

@@ -42,6 +42,7 @@ The result is a serious, end-to-end working product you can put in front of a re
 | 🧾 Numeric text | Columns like `€110.5M`, `5'7`, `159lbs` and FIFA's `88+2` ratings are parsed into numbers during cleaning, so they are no longer mistaken for high-cardinality text and discarded |
 | 🤖 Agent UX | Live tool-call timeline (the agent's actual activity), plan display, progress indicator, chat with grounded answers |
 | 🎯 Improve the score | Turns "remove the outliers and it'll be better" into a measurement: each option (drop weak columns, drop 1.5×IQR outlier rows, both) is cross-validated against the untouched baseline and the deltas are shown. Options that make things **worse** are reported as worse; **Improve automatically** tests everything and retrains on the winner in one click (or says plainly that nothing helped); per-option Apply is still there. Sits directly under the model table |
+| 🧬 Feature engineering | Derives interactions the model cannot see by itself — products, ratios and differences of the columns that already matter. A candidate is only offered if it beats **both** of its parents on mutual information, and the set is only recommended if it beats the plain one under cross-validation. On the heart dataset this was the single biggest gain: held-out F1 0.8306 → 0.8484 |
 | 🎛️ Hyperparameter tuning | A randomised search (12 combinations, 3-fold) over a grid centred on each model's defaults — run only on the model that won, since searching all 22 would cost more than the pipeline. The tuned model is kept **only if it also beats the defaults on the held-out split**, so a result that merely pleased the search folds is discarded |
 | 📊 Dashboard | An **auto-composed** dashboard for any CSV: the schema decides what becomes a measure, a dimension or the timeline. KPI tiles, a trend line, breakdown bars, a distribution, a share donut and a cross-tab heatmap — all recomputed from pandas whenever you click a filter chip |
 | ❓ Ask the data | Natural-language questions answered by a **validated query spec** (filter / group / aggregate / sort), executed by pandas — never generated code. "Which region has the highest average revenue?" returns a sentence, a table and a chart |
@@ -147,7 +148,7 @@ size, so "80% of rows are one category" outranks "3 values are missing".
 | Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS, react-plotly.js |
 | Infra | Docker, docker-compose |
 | Stats | SciPy (t-test, ANOVA, chi-square, Kruskal-Wallis, linear regression for trends) |
-| Tests | pytest (162 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
+| Tests | pytest (174 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
 
 ## Project structure
 
@@ -322,7 +323,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-162 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
+174 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
 
 The analyst suite additionally asserts that the query engine **rejects** unknown columns,
 non-numeric aggregations and near-unique groupings; that aggregation results match pandas

@@ -104,6 +104,9 @@ class TrainRequest(BaseModel):
     )
     impute_numeric: Literal["median", "mean", "zero"] = "median"
     impute_categorical: Literal["mode", "constant"] = "mode"
+    engineered: list[dict[str, Any]] | None = Field(
+        None, max_length=40, description="Derived column specs to build before training"
+    )
 
 
 class ModelResultOut(BaseModel):

@@ -81,6 +81,7 @@ export const api = {
       tune?: boolean;
       impute_numeric?: string;
       impute_categorical?: string;
+      engineered?: Record<string, unknown>[] | null;
     },
   ) =>
     http<ModelRun>(`/api/datasets/${id}/train`, { method: "POST", body: JSON.stringify(payload) }),

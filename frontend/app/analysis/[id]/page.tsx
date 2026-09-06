@@ -95,6 +95,7 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
       tune?: boolean;
       impute_numeric?: string;
       impute_categorical?: string;
+      engineered?: Record<string, unknown>[] | null;
     }) => {
       if (!id) return null;
       setBusy("train");

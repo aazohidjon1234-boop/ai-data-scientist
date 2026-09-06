@@ -14,6 +14,7 @@ type TrainPayload = {
   tune?: boolean;
   impute_numeric?: string;
   impute_categorical?: string;
+  engineered?: Record<string, unknown>[] | null;
 };
 
 export default function ImprovePanel({
@@ -63,6 +64,7 @@ export default function ImprovePanel({
       tune: Boolean(r.changes.tune),
       impute_numeric: r.changes.impute_numeric,
       impute_categorical: r.changes.impute_categorical,
+      engineered: r.changes.engineered ?? null,
     });
 
   /** Test everything and retrain on the winner — the whole loop in one click. */

@@ -28,6 +28,7 @@ def run_training(
     tune: bool = False,
     impute_numeric: str = "median",
     impute_categorical: str = "mode",
+    engineered: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     ds = get_dataset_or_404(db, dataset_id)
     df = load_csv_cached(ds.file_path)
@@ -48,7 +49,8 @@ def run_training(
         result = agent.train(target=target, problem_type=problem_type, k_range=k_range,
                              features=features, drop_outliers=drop_outliers,
                              tune=tune, impute_numeric=impute_numeric,
-                             impute_categorical=impute_categorical)
+                             impute_categorical=impute_categorical,
+                             engineered=engineered)
     except Exception as exc:
         progress.finish(ds.id, error=type(exc).__name__)
         raise

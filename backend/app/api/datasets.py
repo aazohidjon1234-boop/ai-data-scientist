@@ -212,7 +212,8 @@ def train(dataset_id: str, body: TrainRequest | None = None, db: Session = Depen
                                      drop_outliers=body.drop_outliers,
                                      tune=body.tune,
                                      impute_numeric=body.impute_numeric,
-                                     impute_categorical=body.impute_categorical)
+                                     impute_categorical=body.impute_categorical,
+                                     engineered=body.engineered)
     db.refresh(ds)
     return _training_out(db, ds)
 

@@ -175,6 +175,7 @@ class DataScientistAgent:
         tune: bool = False,
         impute_numeric: str = "median",
         impute_categorical: str = "mode",
+        engineered: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         settings = self.settings
         trace = AgentTrace()
@@ -206,6 +207,20 @@ class DataScientistAgent:
                 "No target column could be detected and none was provided. "
                 "Choose a target column (or select 'Clustering' as the task)."
             )
+
+        # Derived columns are built after cleaning so their inputs are already
+        # filled, and before feature preparation so they are scaled like the rest.
+        engineered_names: list[str] = []
+        if engineered:
+            from .feature_engineer import build_features
+
+            with self._step(trace, "prepare_features",
+                            {"purpose": "derived columns", "count": len(engineered)}) as t:
+                clean_df, engineered_names = build_features(clean_df, engineered)
+                if features:
+                    features = list(dict.fromkeys(list(features) + engineered_names))
+                t.ok(f"Built {len(engineered_names)} derived column(s): "
+                     + ", ".join(engineered_names[:4]))
 
         # Optionally drop rows that sit outside 1.5xIQR on a numeric column.
         # Only ever applied when the caller asked for it, because throwing away
@@ -262,6 +277,7 @@ class DataScientistAgent:
             "n_features": int(X.shape[1]),
             "sampled": sampled,
             "outliers_dropped": outlier_report,
+            "engineered_columns": engineered_names,
             "split": f"train {int((1 - settings.train_test_ratio) * 100)}% / test {int(settings.train_test_ratio * 100)}%",
             "class_labels": prep_report.get("class_labels"),
         }

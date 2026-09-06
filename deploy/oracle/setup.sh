@@ -22,17 +22,39 @@ command -v apt-get >/dev/null || die "This script expects an Ubuntu/Debian image
 
 # --------------------------------------------------------------- 1. Docker
 if ! command -v docker >/dev/null; then
-  log "Installing Docker"
+  CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
+  log "Installing Docker (Ubuntu ${CODENAME:-unknown})"
   sudo apt-get update -qq
   sudo apt-get install -y -qq ca-certificates curl
-  sudo install -m 0755 -d /etc/apt/keyrings
-  sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-  sudo chmod a+r /etc/apt/keyrings/docker.asc
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
-    | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
-  sudo apt-get update -qq
-  sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+  # Docker's own repository lags behind brand-new Ubuntu releases. Check that
+  # this codename is actually published before pointing apt at it, otherwise
+  # `apt-get update` fails and takes the whole script down.
+  DOCKER_REPO_OK=0
+  if [ -n "$CODENAME" ] && curl -fsSI --max-time 15 \
+       "https://download.docker.com/linux/ubuntu/dists/$CODENAME/Release" >/dev/null 2>&1; then
+    DOCKER_REPO_OK=1
+  fi
+
+  if [ "$DOCKER_REPO_OK" = "1" ]; then
+    sudo install -m 0755 -d /etc/apt/keyrings
+    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    sudo chmod a+r /etc/apt/keyrings/docker.asc
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+https://download.docker.com/linux/ubuntu $CODENAME stable" \
+      | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io \
+         docker-buildx-plugin docker-compose-plugin
+  else
+    echo "  Docker has no repository for '$CODENAME' yet; using Ubuntu's own packages"
+    sudo apt-get install -y -qq docker.io docker-compose-v2 docker-buildx || \
+    sudo apt-get install -y -qq docker.io docker-compose-v2
+    sudo systemctl enable --now docker
+  fi
+
+  command -v docker >/dev/null || die "Docker installation failed."
+  docker compose version >/dev/null 2>&1 || die "docker compose plugin is missing."
   sudo usermod -aG docker "$USER"
   NEEDS_RELOGIN=1
 else

@@ -21,10 +21,15 @@ A 512 MB free tier fails above ~5,000 rows. The Always Free A1 shape gives
 
 | Setting | Value |
 |---|---|
-| Image | Canonical Ubuntu 24.04 |
+| Image | Canonical Ubuntu — **24.04, 26.04 or whichever LTS Oracle offers** |
 | Shape | **VM.Standard.A1.Flex** (Ampere, ARM) |
 | OCPUs / Memory | 4 / 24 GB (the whole free allowance) |
 | SSH keys | upload your public key |
+
+The VM image is independent of the OS on your own machine — you only reach it
+over SSH. `setup.sh` reads the release codename at runtime and, if Docker has
+not published a repository for it yet, falls back to Ubuntu's own `docker.io`
+and `docker-compose-v2` packages instead of failing.
 
 > **"Out of host capacity"** is the usual first response — free ARM capacity is
 > genuinely scarce in popular regions. Retry at different hours, or pick a less

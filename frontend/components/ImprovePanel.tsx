@@ -28,18 +28,52 @@ export default function ImprovePanel({
 }) {
   const [result, setResult] = useState<ImproveResult | null>(null);
   const [running, setRunning] = useState(false);
+  const [autoRunning, setAutoRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const test = async (): Promise<ImproveResult | null> => {
+    setError(null);
+    setNote(null);
+    try {
+      const r = await api.improve(datasetId);
+      setResult(r);
+      return r;
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not test the options.");
+      return null;
+    }
+  };
 
   const run = async () => {
     setRunning(true);
-    setError(null);
-    try {
-      setResult(await api.improve(datasetId));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not test the options.");
-    } finally {
-      setRunning(false);
+    await test();
+    setRunning(false);
+  };
+
+  const applyRecipe = (r: ImproveResult["recipes"][number]) =>
+    onRetrain({
+      target,
+      problem_type: problemType,
+      features: r.changes.features,
+      drop_outliers: r.changes.drop_outliers,
+    });
+
+  /** Test everything and retrain on the winner — the whole loop in one click. */
+  const improveAutomatically = async () => {
+    setAutoRunning(true);
+    const r = await test();
+    setAutoRunning(false);
+    if (!r) return;
+    const winner = r.recipes.find((x) => x.key === r.recommended);
+    if (!winner || r.recommended === "baseline") {
+      setNote(
+        "Tested every option — none beat the current setup by a meaningful margin, so nothing was changed.",
+      );
+      return;
     }
+    setNote(`Applying "${winner.label}" and retraining…`);
+    applyRecipe(winner);
   };
 
   return (
@@ -50,23 +84,35 @@ export default function ImprovePanel({
             Can this score be improved?
           </h3>
           <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-            Each option below is actually trained and cross-validated before anything changes, so
-            you see a measured score rather than a promise. Nothing is applied until you choose.
+            <strong>Improve automatically</strong> tests every option and retrains on the winner —
+            or tells you plainly that nothing helped. Use <strong>Test the options</strong> to see
+            the scores first and choose yourself. Either way the options are really trained and
+            cross-validated, so the numbers are measured rather than promised.
           </p>
         </div>
-        <Button onClick={run} disabled={running || busy}>
-          {running ? "Testing…" : result ? "Test again" : "Test the options"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={improveAutomatically} disabled={running || autoRunning || busy}>
+            {autoRunning ? "Testing…" : "⚡ Improve automatically"}
+          </Button>
+          <Button variant="secondary" onClick={run} disabled={running || autoRunning || busy}>
+            {running ? "Testing…" : result ? "Test again" : "Test the options"}
+          </Button>
+        </div>
       </div>
 
       {error && <div className="mt-3"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
-      {running && (
+      {note && (
+        <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:bg-slate-800/60 dark:text-slate-200">
+          {note}
+        </p>
+      )}
+      {(running || autoRunning) && (
         <div className="mt-4">
           <Spinner label="Training each option on cross-validation folds — this is real computation…" />
         </div>
       )}
 
-      {result && !running && (
+      {result && !running && !autoRunning && (
         <div className="mt-4 space-y-3">
           <p
             className="text-sm text-slate-800 dark:text-slate-200"
@@ -134,14 +180,7 @@ export default function ImprovePanel({
                       <td className="px-3 py-2 text-right">
                         <button
                           disabled={busy}
-                          onClick={() =>
-                            onRetrain({
-                              target,
-                              problem_type: problemType,
-                              features: r.changes.features,
-                              drop_outliers: r.changes.drop_outliers,
-                            })
-                          }
+                          onClick={() => applyRecipe(r)}
                           className="whitespace-nowrap rounded-md border border-indigo-400 px-2.5 py-1 text-xs font-medium text-indigo-600 transition hover:bg-indigo-600 hover:text-white disabled:opacity-40 dark:text-indigo-300"
                         >
                           Apply &amp; retrain

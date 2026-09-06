@@ -31,11 +31,16 @@ def run_training(
 
     save_dir = Path(get_settings().model_dir) / ds.id
     agent = DataScientistAgent(df, model_dir=save_dir, dataset_id=ds.id)
-    progress.start(ds.id, "training", [
-        "Reading the file", "Checking missing values", "Cleaning the data",
+    # Must mirror the tools train() actually calls, or a stage that never runs
+    # sits unticked for the whole run and reads as if something stalled.
+    stages = ["Reading the file", "Cleaning the data"]
+    if drop_outliers:
+        stages.append("Looking for outliers")
+    stages += [
         "Deciding the task", "Preparing features", "Training models",
-        "Comparing models", "Writing the explanation",
-    ])
+        "Evaluating on held-out data", "Comparing models", "Writing the explanation",
+    ]
+    progress.start(ds.id, "training", stages)
     try:
         result = agent.train(target=target, problem_type=problem_type, k_range=k_range,
                              features=features, drop_outliers=drop_outliers)

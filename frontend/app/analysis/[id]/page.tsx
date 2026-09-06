@@ -207,35 +207,36 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
           />
 
           {progress && progress.planned.length > 0 && (
-            <ol className="mt-4 space-y-1.5">
-              {progress.planned.map((stage) => {
+            <ol className="mt-4 flex flex-wrap items-center gap-x-1 gap-y-2">
+              {progress.planned.map((stage, i) => {
                 const finished = progress.done.some((d) => d.stage === stage);
                 const active = progress.current === stage;
                 const seconds = progress.done
                   .filter((d) => d.stage === stage)
                   .reduce((n, d) => n + d.seconds, 0);
                 return (
-                  <li key={stage} className="flex items-center gap-2 text-sm">
-                    <span className="w-4 shrink-0 text-center">
-                      {finished && !active ? "✓" : active ? "▶" : "·"}
-                    </span>
+                  <li key={stage} className="flex items-center gap-1">
+                    {i > 0 && (
+                      <span className="mr-1 text-slate-300 dark:text-slate-700" aria-hidden>
+                        ›
+                      </span>
+                    )}
                     <span
-                      className={
+                      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs transition ${
                         active
-                          ? "font-medium text-indigo-600 dark:text-indigo-300"
+                          ? "border-indigo-400 bg-indigo-600 text-white"
                           : finished
-                            ? "text-slate-600 dark:text-slate-300"
-                            : "text-slate-400 dark:text-slate-600"
-                      }
+                            ? "border-green-300 bg-green-50 text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-300"
+                            : "border-slate-200 text-slate-400 dark:border-slate-800 dark:text-slate-600"
+                      }`}
                     >
+                      <span aria-hidden>{finished && !active ? "✓" : active ? "▶" : "·"}</span>
                       {stage}
+                      {active && <span className="opacity-80">{progress.stage_elapsed}s</span>}
+                      {finished && !active && seconds > 0 && (
+                        <span className="opacity-70">{seconds.toFixed(1)}s</span>
+                      )}
                     </span>
-                    {active && (
-                      <span className="text-xs text-slate-400">{progress.stage_elapsed}s</span>
-                    )}
-                    {finished && !active && seconds > 0 && (
-                      <span className="text-xs text-slate-400">{seconds.toFixed(1)}s</span>
-                    )}
                   </li>
                 );
               })}
@@ -270,16 +271,6 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
 
       {/* Training configuration. Shown after a run too, so the target and the
           input columns can be changed and the run repeated. */}
-      {run && analysis && !busy && (
-        <ImprovePanel
-          datasetId={id}
-          target={run.target}
-          problemType={run.problem_type}
-          busy={!!busy}
-          onRetrain={(p) => doTrain(p)}
-        />
-      )}
-
       {analysis && !busy && (
         <TargetSelector
           analysis={analysis}
@@ -350,6 +341,17 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
               </div>
 
               {tab === "models" && <ModelsSection run={run} />}
+              {tab === "models" && run && !busy && (
+                <div className="mt-5 border-t border-slate-200 pt-5 dark:border-slate-800">
+                  <ImprovePanel
+                    datasetId={id}
+                    target={run.target}
+                    problemType={run.problem_type}
+                    busy={!!busy}
+                    onRetrain={(p) => doTrain(p)}
+                  />
+                </div>
+              )}
 
               {tab === "activity" && (
                 <div className="grid gap-6 lg:grid-cols-2">

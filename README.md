@@ -199,7 +199,25 @@ docker compose up --build
 - API + interactive docs (Swagger): http://localhost:8000/docs
 - PostgreSQL: `db` container (data persisted in the `pgdata` volume)
 
-### 3b. Run locally without Docker
+### 3b. Everyday use
+
+After the first setup, this is the whole thing:
+
+```bash
+cd ~/Downloads/ai-data-scientist
+./start.sh
+```
+
+Then open <http://localhost:3000>. `Ctrl+C` stops both processes.
+
+`start.sh` uses `backend/.venv`, waits for the API before starting the
+dashboard, tells you whether the LLM is configured, and refuses to start if a
+port is already taken (instead of failing halfway).
+
+To let other devices on your Wi-Fi use it, run `./scripts/serve-lan.sh`
+instead — it prints the address they should open.
+
+### 3c. Run the pieces separately
 
 ```bash
 # backend (defaults to SQLite — zero setup)

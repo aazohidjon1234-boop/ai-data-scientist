@@ -268,3 +268,65 @@ def test_train_endpoint_rejects_bad_features(client, regression_dataset_id):
                     json={"target": "price", "features": ["not_a_column"]})
     assert r.status_code == 400
     assert "not in the dataset" in r.json()["error"]["message"]
+
+
+# --------------------------------------------- large data / awkward names
+def test_kernel_models_subsample_both_sides():
+    """SVM caps its training rows; y must be cut with the same indices.
+
+    Sampling X alone left y at full length, so SVM and SVR failed with
+    "inconsistent numbers of samples" on every dataset above the cap.
+    """
+    import numpy as np
+    import pandas as pd
+    from app.tools import data_tools
+
+    cap = data_tools._MAX_FIT_ROWS["SVM"]
+    n = cap + 500
+    rng = np.random.default_rng(2)
+    X = pd.DataFrame({"a": rng.normal(0, 1, n), "b": rng.normal(0, 1, n)})
+    y = (X["a"] + rng.normal(0, 0.5, n) > 0).astype(int).to_numpy()
+
+    model, seconds = data_tools.train_model("SVM", "classification", X, y, random_state=0)
+    assert seconds >= 0
+    assert len(model.predict(X.head(10))) == 10
+
+
+def test_feature_names_are_stripped_of_characters_boosters_reject():
+    """LightGBM rejects spaces and JSON punctuation in feature names."""
+    import pandas as pd
+    from app.tools.data_tools import prepare_features
+
+    df = pd.DataFrame({
+        "General Health": ["Very Good", "Poor", "Very Good", "Poor"] * 5,
+        "score[raw]": range(20),
+        "y": [0, 1] * 10,
+    })
+    X, _, report = prepare_features(df, "y", "classification")
+    for name in X.columns:
+        assert all(ch.isalnum() or ch == "_" for ch in name), name
+    assert all(all(c.isalnum() or c == "_" for c in n) for n in report["features"])
+
+
+def test_sanitising_does_not_merge_distinct_columns():
+    from app.tools.data_tools import _safe_feature_names
+
+    assert _safe_feature_names(["a b", "a!b"]) == ["a_b", "a_b_1"]
+
+
+def test_boosters_train_on_multiword_categories(client):
+    """End to end: the combination that failed in the browser."""
+    import io
+
+    rows = "\n".join(
+        f"{'Very Good' if i % 3 else 'Poor'},{i % 7},{i % 2}" for i in range(120)
+    )
+    csv = "general health,score,label\n" + rows + "\n"
+    r = client.post("/api/datasets/upload",
+                    files={"file": ("cat.csv", io.BytesIO(csv.encode()), "text/csv")})
+    assert r.status_code == 201, r.text
+    run = client.post(f"/api/datasets/{r.json()['id']}/train", json={"target": "label"})
+    assert run.status_code == 200, run.text
+    failed = {m["name"]: m["status_message"] for m in run.json()["models"] if m["status"] != "ok"}
+    assert "LightGBM" not in failed, failed.get("LightGBM")
+    assert "XGBoost" not in failed, failed.get("XGBoost")

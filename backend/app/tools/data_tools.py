@@ -440,6 +440,32 @@ def detect_problem_type(df: pd.DataFrame, target: str | None = None) -> dict[str
 # tool: prepare_features
 # --------------------------------------------------------------------------
 
+_UNSAFE_FEATURE_CHARS = re.compile(r"[^0-9A-Za-z_]+")
+
+
+def _safe_feature_names(columns) -> list[str]:
+    """Column names LightGBM and XGBoost will accept.
+
+    One-hot encoding produces names like "General_Health_Very Good"; LightGBM
+    refuses spaces and JSON punctuation outright, so those models failed on any
+    dataset with multi-word categories. Collisions after cleaning are numbered
+    rather than silently merged.
+    """
+    seen: dict[str, int] = {}
+    out: list[str] = []
+    for name in columns:
+        safe = _UNSAFE_FEATURE_CHARS.sub("_", str(name)).strip("_") or "feature"
+        if safe[0].isdigit():
+            safe = f"f_{safe}"
+        if safe in seen:
+            seen[safe] += 1
+            safe = f"{safe}_{seen[safe]}"
+        else:
+            seen[safe] = 0
+        out.append(safe)
+    return out
+
+
 def prepare_features(
     df: pd.DataFrame,
     target: str | None,
@@ -519,6 +545,7 @@ def prepare_features(
         scaled_cols = num_cols
 
     dummied = pd.get_dummies(data, columns=cat_cols, dummy_na=False, dtype=int)
+    dummied.columns = _safe_feature_names(dummied.columns)
     encoded = [c for c in dummied.columns if c not in num_cols]
 
     if y_raw is not None:
@@ -662,12 +689,18 @@ def train_model(
     if model_name not in registry:
         raise ValidationError(f"Unknown model '{model_name}' for {problem_type}.")
     model = registry[model_name]()
-    fit_X = X
+    fit_X, fit_y = X, y
     cap = _MAX_FIT_ROWS.get(model_name)
     if cap is not None and len(X) > cap:
-        fit_X = X.sample(n=cap, random_state=random_state)
+        # Both sides must be cut with the SAME indices. Sampling X alone left y
+        # at full length, so every kernel model failed with "inconsistent
+        # numbers of samples" on any dataset above the cap.
+        rng = np.random.default_rng(random_state)
+        picked = rng.choice(len(X), size=cap, replace=False)
+        fit_X = X.iloc[picked]
+        fit_y = None if y is None else np.asarray(y)[picked]
     t0 = time.perf_counter()
-    model.fit(fit_X, y)
+    model.fit(fit_X, fit_y)
     return model, time.perf_counter() - t0
 
 

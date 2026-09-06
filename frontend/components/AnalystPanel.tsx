@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import DashboardPanel from "@/components/DashboardPanel";
 import PlotlyChart from "@/components/PlotlyChart";
 import { Badge, Button, Card, EmptyState, ErrorAlert, Spinner } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
@@ -15,9 +16,10 @@ import type {
   TrendResult,
 } from "@/lib/types";
 
-type Tab = "ask" | "insights" | "compare" | "trend";
+type Tab = "dashboard" | "ask" | "insights" | "compare" | "trend";
 
 const TABS: { key: Tab; label: string; hint: string }[] = [
+  { key: "dashboard", label: "Dashboard", hint: "KPIs and charts with filters" },
   { key: "ask", label: "Ask", hint: "Question the data directly" },
   { key: "insights", label: "Insights", hint: "What the agent noticed on its own" },
   { key: "compare", label: "Compare", hint: "Is the difference real?" },
@@ -538,7 +540,7 @@ function TrendTab({ datasetId, schema }: { datasetId: string; schema: DatasetSch
 
 /* ------------------------------------------------------------------ panel */
 export default function AnalystPanel({ datasetId }: { datasetId: string }) {
-  const [tab, setTab] = useState<Tab>("ask");
+  const [tab, setTab] = useState<Tab>("dashboard");
   const [schema, setSchema] = useState<DatasetSchema | null>(null);
 
   useEffect(() => {
@@ -564,6 +566,7 @@ export default function AnalystPanel({ datasetId }: { datasetId: string }) {
         ))}
       </div>
 
+      {tab === "dashboard" && <DashboardPanel datasetId={datasetId} />}
       {tab === "ask" && <AskTab datasetId={datasetId} />}
       {tab === "insights" && <InsightsTab datasetId={datasetId} />}
       {tab === "compare" && <CompareTab datasetId={datasetId} schema={schema} />}

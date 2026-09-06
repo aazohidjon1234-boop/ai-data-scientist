@@ -269,3 +269,39 @@ export interface FeatureSuggestion {
   summary: string;
   tools_used: string[];
 }
+
+export interface DashboardKpi {
+  label: string;
+  value: number | string;
+  format: "int" | "num" | "text";
+  hint: string;
+}
+
+export interface DashboardFilterOption {
+  column: string;
+  values: string[];
+  truncated: boolean;
+}
+
+export interface DashboardResult {
+  dataset_id: string;
+  dataset_name: string;
+  layout: {
+    measures: string[];
+    dimensions: string[];
+    date_columns: string[];
+    primary_measure: string | null;
+    primary_dimension: string | null;
+    primary_date: string | null;
+  };
+  measure: string | null;
+  dimension: string | null;
+  date_column: string | null;
+  rows_total: number;
+  rows_shown: number;
+  kpis: DashboardKpi[];
+  charts: Figure[];
+  filter_options: DashboardFilterOption[];
+  empty: boolean;
+  tools_used: string[];
+}

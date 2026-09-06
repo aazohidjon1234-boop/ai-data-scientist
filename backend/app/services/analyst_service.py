@@ -11,6 +11,7 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from ..agents.analyst import answer_question
+from ..agents.dashboard import build_dashboard
 from ..agents.feature_advisor import suggest_features
 from ..agents.insights import generate_insights
 from ..agents.llm_client import LLMClient
@@ -19,6 +20,7 @@ from ..models.db import Dataset
 from ..tools.analytics_tools import compare_segments, detect_datetime_columns, time_series
 from ..tools.query_tools import (
     MAX_DIMENSION_SUGGESTIONS,
+    Filter,
     QuerySpec,
     describe_schema,
     pivot_table,
@@ -128,3 +130,13 @@ def feature_suggestion(db: Session, dataset_id: str, target: str | None,
     if not chosen:
         raise ValidationError("Pick a target column first — suggestions are relative to it.")
     return suggest_features(df, chosen, kind)
+
+
+def dashboard(db: Session, dataset_id: str, filters: list[Filter] | None,
+              measure: str | None, dimension: str | None,
+              date_column: str | None) -> dict[str, Any]:
+    ds, df = _frame(db, dataset_id)
+    result = build_dashboard(df, filters, measure, dimension, date_column)
+    result["dataset_id"] = ds.id
+    result["dataset_name"] = ds.name
+    return result

@@ -205,3 +205,10 @@ class AskOut(BaseModel):
 class SuggestFeaturesRequest(BaseModel):
     target: str | None = None
     problem_type: ProblemType | None = None
+
+
+class DashboardRequest(BaseModel):
+    filters: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
+    measure: str | None = None
+    dimension: str | None = None
+    date_column: str | None = None

@@ -16,6 +16,7 @@ from ..exceptions import AppError, DatasetNotFoundError, ReportNotFoundError, Va
 from ..models.db import Analysis, Dataset, ModelResult, Report
 from ..schemas.api import (
     AnalyzeRequest,
+    DashboardRequest,
     AnalysisOut,
     AskOut,
     AskRequest,
@@ -35,7 +36,7 @@ from ..schemas.api import (
     TrainRequest,
     TrendRequest,
 )
-from ..tools.query_tools import QuerySpec
+from ..tools.query_tools import Filter, QuerySpec
 from ..utils.dataframe_store import load_csv_cached
 from ..utils.jsonutils import to_jsonable
 from ..services import (
@@ -273,6 +274,17 @@ def get_trend(dataset_id: str, body: TrendRequest | None = None, db: Session = D
 @router.post("/datasets/{dataset_id}/segments")
 def get_segments(dataset_id: str, body: SegmentRequest, db: Session = Depends(get_db)):
     return to_jsonable(analyst_service.segments(db, dataset_id, body.dimension, body.metric))
+
+
+@router.post("/datasets/{dataset_id}/dashboard")
+def dashboard_endpoint(dataset_id: str, body: DashboardRequest | None = None,
+                       db: Session = Depends(get_db)):
+    body = body or DashboardRequest()
+    filters = [Filter.model_validate(f) for f in body.filters]
+    return to_jsonable(
+        analyst_service.dashboard(db, dataset_id, filters, body.measure,
+                                  body.dimension, body.date_column)
+    )
 
 
 @router.post("/datasets/{dataset_id}/suggest-features")

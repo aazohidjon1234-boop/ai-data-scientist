@@ -3,6 +3,7 @@ import type {
   AskResult,
   Dataset,
   DatasetDetail,
+  DashboardResult,
   DatasetSchema,
   FeatureSuggestion,
   Figure,
@@ -95,6 +96,19 @@ export const api = {
     http<AskResult>(`/api/datasets/${id}/ask`, {
       method: "POST",
       body: JSON.stringify({ question }),
+    }),
+  dashboard: (
+    id: string,
+    payload: {
+      filters?: { column: string; op: string; value: unknown }[];
+      measure?: string | null;
+      dimension?: string | null;
+      date_column?: string | null;
+    } = {},
+  ) =>
+    http<DashboardResult>(`/api/datasets/${id}/dashboard`, {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
   suggestFeatures: (id: string, target?: string | null, problem_type?: ProblemType | null) =>
     http<FeatureSuggestion>(`/api/datasets/${id}/suggest-features`, {

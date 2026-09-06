@@ -1,6 +1,10 @@
 """Model training: real metrics, best-model selection, per-task behavior."""
 import pytest
 
+from tests.conftest import _regression_rows
+
+_REG_ROWS = _regression_rows()
+
 
 def _train(client, ds_id, **body):
     r = client.post(f"/api/datasets/{ds_id}/train", json=body or {})
@@ -185,3 +189,82 @@ def test_model_download_unknown_404(regression_dataset_id, client):
     _train(client, regression_dataset_id)
     r = client.get(f"/api/datasets/{regression_dataset_id}/models/no-such-model-xyz/download")
     assert r.status_code == 400  # not found -> clean validation error
+
+
+# ---------------------------------------------------- user-chosen features
+# The training pipeline lets the caller pick which columns become X. These
+# guard the two ways that can go wrong: chosen columns being ignored, and
+# unchosen columns (especially the target) leaking in anyway.
+
+@pytest.fixture
+def frame():
+    """Raw frame minus rows with no target — what cleaning hands to prepare_features."""
+    from app.services.dataset_service import parse_csv
+
+    df = parse_csv(("price,size,rooms,neighborhood\n" + _REG_ROWS).encode())
+    return df.dropna(subset=["price"]).reset_index(drop=True)
+
+
+def test_feature_selection_restricts_the_model_inputs(frame):
+    from app.tools.data_tools import prepare_features
+
+    X_all, _, report_all = prepare_features(frame, "price", "regression")
+    X_few, _, report_few = prepare_features(frame, "price", "regression", ["size", "rooms"])
+    assert X_few.shape[1] < X_all.shape[1]
+    assert set(report_few["source_columns"]) == {"size", "rooms"}
+    assert report_few["selected_by_user"] == ["size", "rooms"]
+    assert report_all["selected_by_user"] is None  # omitted == use everything
+
+
+def test_feature_selection_keeps_every_row(frame):
+    from app.tools.data_tools import prepare_features
+
+    X, y, _ = prepare_features(frame, "price", "regression", ["size"])
+    assert len(X) == len(frame) and len(y) == len(frame)
+
+
+def test_target_cannot_be_used_as_its_own_feature(frame):
+    """Including the target in X would leak the answer into the model."""
+    from app.tools.data_tools import prepare_features
+
+    _, _, report = prepare_features(frame, "price", "regression", ["price", "size"])
+    assert "price" not in report["source_columns"]
+    assert report["selected_by_user"] == ["size"]
+
+
+def test_unknown_feature_column_is_rejected(frame):
+    from app.exceptions import ValidationError
+    from app.tools.data_tools import prepare_features
+
+    with pytest.raises(ValidationError, match="not in the dataset"):
+        prepare_features(frame, "price", "regression", ["nope"])
+
+
+def test_selecting_only_the_target_is_rejected(frame):
+    from app.exceptions import ValidationError
+    from app.tools.data_tools import prepare_features
+
+    with pytest.raises(ValidationError, match="at least one input column"):
+        prepare_features(frame, "price", "regression", ["price"])
+
+
+def test_unknown_target_is_rejected(frame):
+    from app.exceptions import ValidationError
+    from app.tools.data_tools import prepare_features
+
+    with pytest.raises(ValidationError, match="not in this dataset"):
+        prepare_features(frame, "no_such_column", "regression")
+
+
+def test_train_endpoint_accepts_features(client, regression_dataset_id):
+    run = _train(client, regression_dataset_id,
+                 target="price", problem_type="regression", features=["size", "rooms"])
+    assert run["best_model"]
+    assert run["target"] == "price"
+
+
+def test_train_endpoint_rejects_bad_features(client, regression_dataset_id):
+    r = client.post(f"/api/datasets/{regression_dataset_id}/train",
+                    json={"target": "price", "features": ["not_a_column"]})
+    assert r.status_code == 400
+    assert "not in the dataset" in r.json()["error"]["message"]

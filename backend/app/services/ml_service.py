@@ -22,13 +22,15 @@ def run_training(
     target: str | None = None,
     problem_type: str | None = None,
     k_range: tuple[int, int] | None = None,
+    features: list[str] | None = None,
 ) -> dict[str, Any]:
     ds = get_dataset_or_404(db, dataset_id)
     df = load_csv_cached(ds.file_path)
 
     save_dir = Path(get_settings().model_dir) / ds.id
     agent = DataScientistAgent(df, model_dir=save_dir)
-    result = agent.train(target=target, problem_type=problem_type, k_range=k_range)
+    result = agent.train(target=target, problem_type=problem_type, k_range=k_range,
+                         features=features)
 
     run_id = uuid.uuid4().hex
     clear_ml_state(db, ds)

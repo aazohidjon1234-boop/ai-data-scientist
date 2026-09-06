@@ -402,12 +402,38 @@ def prepare_features(
     df: pd.DataFrame,
     target: str | None,
     problem_type: str,
+    features: list[str] | None = None,
 ) -> tuple[pd.DataFrame, np.ndarray | None, dict[str, Any]]:
+    """Turn a dataframe into a model-ready X/y pair.
+
+    `features` restricts which columns become X. Omitted (None) means "use
+    everything except the target", which is the historical behaviour. An empty
+    list is a user error, not a request for zero features, and is rejected.
+    """
     settings = get_settings()
     if problem_type != "clustering" and target is None:
         raise ValidationError("A target column is required for supervised tasks.")
+    if target is not None and target not in df.columns:
+        raise ValidationError(f"Target column '{target}' is not in this dataset.")
 
     data = df.copy()
+
+    requested: list[str] | None = None
+    if features is not None:
+        unknown = [c for c in features if c not in df.columns]
+        if unknown:
+            raise ValidationError(
+                "These columns are not in the dataset: " + ", ".join(map(str, unknown[:10]))
+            )
+        # Selecting the target as a feature would leak it straight into X.
+        requested = [c for c in dict.fromkeys(features) if c != target]
+        if not requested:
+            raise ValidationError(
+                "Choose at least one input column that is not the target column."
+            )
+        keep = requested + ([target] if problem_type != "clustering" else [])
+        data = data[keep]
+
     if problem_type != "clustering":
         y_raw = data.pop(target)
     else:
@@ -481,6 +507,10 @@ def prepare_features(
             "scaled_columns": scaled_cols,
             "dropped_columns": dropped or ["none"],
             "class_labels": class_labels,
+            # What the user asked for, before automatic dropping — so the UI can
+            # show that a chosen column was discarded and why.
+            "selected_by_user": requested,
+            "source_columns": sorted(set(num_cols) | set(cat_cols)),
         }
     )
     return dummied, y, report

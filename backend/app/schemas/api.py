@@ -91,6 +91,11 @@ class TrainRequest(BaseModel):
     target: str | None = Field(None, description="Target column (auto-detected if omitted)")
     problem_type: ProblemType | None = Field(None, description="Override task type")
     k: int | None = Field(None, ge=2, le=12, description="Clusters for K-Means (auto-search if omitted)")
+    features: list[str] | None = Field(
+        None,
+        max_length=500,
+        description="Input columns to train on. Omit to use every column except the target.",
+    )
 
 
 class ModelResultOut(BaseModel):

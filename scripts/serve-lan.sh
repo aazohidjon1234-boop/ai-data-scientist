@@ -57,6 +57,8 @@ cd "$ROOT/frontend"
 # BACKEND_URL stays on localhost on purpose: the proxy runs here, not in the
 # visitor's browser, so the API never needs a network-visible address.
 export BACKEND_URL="http://127.0.0.1:$API_PORT"
+# `next start` cannot serve a standalone build; that output mode is for Docker.
+export NEXT_DISABLE_STANDALONE=1
 
 if [ "$MODE" = "prod" ]; then
     log "Building the dashboard (one-off, ~30s)"

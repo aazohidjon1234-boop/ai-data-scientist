@@ -198,7 +198,8 @@ def train(dataset_id: str, body: TrainRequest | None = None, db: Session = Depen
     body = body or TrainRequest()
     k = (body.k, min(body.k + 6, 12)) if body.k else None
     result = ml_service.run_training(db, dataset_id, target=body.target,
-                                     problem_type=body.problem_type, k_range=k)
+                                     problem_type=body.problem_type, k_range=k,
+                                     features=body.features)
     db.refresh(ds)
     return _training_out(db, ds)
 

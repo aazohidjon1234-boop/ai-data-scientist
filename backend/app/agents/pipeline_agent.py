@@ -145,6 +145,7 @@ class DataScientistAgent:
         target: str | None = None,
         problem_type: str | None = None,
         k_range: tuple[int, int] | None = None,
+        features: list[str] | None = None,
     ) -> dict[str, Any]:
         settings = self.settings
         trace = AgentTrace()
@@ -189,8 +190,9 @@ class DataScientistAgent:
             "target": tcol,
             "problem_type": ptype,
             "rows": int(work.shape[0]),
+            "chosen_inputs": len(features) if features else "all",
         }) as t:
-            X, y, prep_report = data_tools.prepare_features(work, tcol, ptype)
+            X, y, prep_report = data_tools.prepare_features(work, tcol, ptype, features)
             t.ok(
                 f"{prep_report['n_features']} features "
                 f"({len(prep_report['numeric_features'])} numeric scaled, "

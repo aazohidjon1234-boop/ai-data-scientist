@@ -61,7 +61,11 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
   );
 
   const doTrain = useCallback(
-    async (payload: { target?: string | null; problem_type?: ProblemType | null }) => {
+    async (payload: {
+      target?: string | null;
+      problem_type?: ProblemType | null;
+      features?: string[] | null;
+    }) => {
       if (!id) return null;
       setBusy("train");
       setStartedAt(Date.now());
@@ -200,11 +204,13 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
         </Section>
       )}
 
-      {/* target selector */}
-      {analysis && !run && !busy && (
+      {/* Training configuration. Shown after a run too, so the target and the
+          input columns can be changed and the run repeated. */}
+      {analysis && !busy && (
         <TargetSelector
           analysis={analysis}
           busy={!!busy}
+          hasRun={!!run}
           onTrain={(p) => doTrain(p)}
         />
       )}

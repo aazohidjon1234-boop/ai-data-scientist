@@ -66,7 +66,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(target ? { target } : {}),
     }),
-  train: (id: string, payload: { target?: string | null; problem_type?: ProblemType | null; k?: number | null }) =>
+  train: (
+    id: string,
+    payload: {
+      target?: string | null;
+      problem_type?: ProblemType | null;
+      k?: number | null;
+      features?: string[] | null;
+    },
+  ) =>
     http<ModelRun>(`/api/datasets/${id}/train`, { method: "POST", body: JSON.stringify(payload) }),
   models: (id: string) => http<ModelRun>(`/api/datasets/${id}/models`),
   visualizations: (id: string) => http<{ dataset_id: string; figures: Figure[] }>(`/api/datasets/${id}/visualizations`),

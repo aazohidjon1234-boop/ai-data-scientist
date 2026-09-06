@@ -12,8 +12,13 @@ while training the model zoo:
 | 10,000 rows | 717 MB |
 | 50,000 rows | 1,051 MB |
 
-A 512 MB free tier fails above ~5,000 rows. The Always Free A1 shape gives
-**4 ARM cores and 24 GB RAM**, which clears this with room to spare.
+A 512 MB free tier fails above ~5,000 rows. The Always Free A1 allowance is
+**2 ARM cores and 12 GB RAM** (1,500 OCPU-hours + 9,000 GB-hours per month,
+halved from 4/24 in June 2026) — still ten times the memory this needs.
+
+**Always Free does not expire.** It is separate from the 30-day trial credits:
+when the trial ends the account keeps its Always Free resources indefinitely.
+The one thing that can take the VM away is idle reclamation — see below.
 
 ## 1. Create the VM
 
@@ -23,7 +28,7 @@ A 512 MB free tier fails above ~5,000 rows. The Always Free A1 shape gives
 |---|---|
 | Image | Canonical Ubuntu — **24.04, 26.04 or whichever LTS Oracle offers** |
 | Shape | **VM.Standard.A1.Flex** (Ampere, ARM) |
-| OCPUs / Memory | 4 / 24 GB (the whole free allowance) |
+| OCPUs / Memory | 2 / 12 GB (the whole Always Free allowance) |
 | SSH keys | upload your public key |
 
 The VM image is independent of the OS on your own machine — you only reach it

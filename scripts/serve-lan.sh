@@ -28,6 +28,17 @@ lan_ip() {
 IP="$(lan_ip)"
 [ -n "$IP" ] || die "No network address found. Are you connected to Wi-Fi?"
 
+# Check both ports BEFORE doing anything slow. Without this the script starts a
+# backend that cannot bind, sees the *other* copy answering its health check,
+# spends half a minute on a production build and only then dies on port 3000.
+for port in "$API_PORT" "$PORT"; do
+    if ss -ltn 2>/dev/null | grep -q ":$port "; then
+        die "Port $port is already in use — another copy is probably still running.
+Stop it with:
+  pkill -f 'uvicorn app.main'; pkill -f next-server"
+    fi
+done
+
 # ------------------------------------------------------------------ backend
 cd "$ROOT/backend"
 PY="$ROOT/backend/.venv/bin/python"

@@ -73,11 +73,6 @@ export default function TargetSelector({
   const [imputeNumeric, setImputeNumeric] = useState("median");
   const [imputeCategorical, setImputeCategorical] = useState("mode");
 
-  // Gaps in the columns that will actually be used; filling only matters there.
-  const gaps = chosen.filter((c) => (meta(c)?.missing ?? 0) > 0);
-  const numericGaps = gaps.filter((c) => meta(c)?.kind === "numeric");
-  const textGaps = gaps.filter((c) => meta(c)?.kind !== "numeric");
-
   const [advice, setAdvice] = useState<FeatureSuggestion | null>(null);
   const [advising, setAdvising] = useState(false);
   const [adviceError, setAdviceError] = useState<string | null>(null);
@@ -111,6 +106,13 @@ export default function TargetSelector({
     const m = meta(name);
     return m ? Math.round((m.missing / rows) * 100) : 0;
   };
+
+  // Declared after `meta` on purpose: these run during render, and reading a
+  // const arrow function before its declaration is a TDZ error at runtime even
+  // though the types check out.
+  const gaps = chosen.filter((c) => (meta(c)?.missing ?? 0) > 0);
+  const numericGaps = gaps.filter((c) => meta(c)?.kind === "numeric");
+  const textGaps = gaps.filter((c) => meta(c)?.kind !== "numeric");
 
   const canTrain =
     !busy && chosen.length > 0 && (mode === "clustering" || Boolean(target || suggested));

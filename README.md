@@ -22,7 +22,73 @@ The result is a serious, end-to-end working product you can put in front of a re
 4. It **cleans and prepares** the data — imputation, dedup, one-hot encoding, scaling, dropping unusable columns, stratified train/test split.
 5. It **trains a full model zoo** — 11 regression models (Linear, Ridge, Decision Tree, Random Forest, Extra Trees, Gradient Boosting, HistGradientBoosting, XGBoost, LightGBM, KNN, SVR), 11 classification models (Logistic, Decision Tree, Random Forest, Extra Trees, Gradient Boosting, XGBoost, LightGBM, SVM, KNN, Naive Bayes, AdaBoost), or a cluster zoo (K-Means, Agglomerative/Ward, DBSCAN) — and evaluates everything on held-out data.
 6. It **compares them in a ranked table + charts**, picks the best by the appropriate primary metric (R², macro-F1, silhouette), and reports feature importances.
-7. It **explains everything** in a chat-style panel — and writes a full downloadable Markdown report.
+7. It **tries to beat its own score** — derived features, column selection, outlier removal, hyperparameter search, imputation strategy — and reports the measured result of each.
+8. It **answers questions about the data**, builds a filterable dashboard, and writes a downloadable Markdown report.
+
+## Results
+
+Every number below was produced by the app on a real dataset, not estimated.
+
+### Raising the score is measured, never asserted
+
+On the UCI heart dataset (303 rows, 14 columns), asking *"can this be improved?"*
+cross-validates each option against the current run and reports all of them —
+including the ones that make things worse:
+
+| Option | macro F1 | Change |
+|---|---|---|
+| **Add 8 derived columns** | **0.8414** | **+0.0142** |
+| Train on the informative columns only | 0.8338 | +0.0066 |
+| Keep the current setup | 0.8272 | — |
+| Remove outlier rows | 0.8249 | −0.0023 |
+| Tune SVM | 0.8200 | −0.0072 |
+| Informative columns *and* no outliers | 0.8065 | −0.0207 |
+
+Applying the winner moved the held-out F1 from **0.8306 to 0.8484**. Three of the
+five ideas hurt, and the app said so rather than quietly applying them.
+
+The hyperparameter search shows the same discipline: it found `C=0.149` for SVM,
+which scored better on the search folds but dropped test F1 from 0.8306 to
+0.8124 — so the defaults were kept and the run reported why.
+
+### The filling strategy is argued with numbers
+
+On a frame with 20% missing values and one extreme outlier:
+
+| Strategy | macro F1 | Change |
+|---|---|---|
+| **median** (default) | **0.8209** | — |
+| mean | 0.8184 | −0.0025 |
+| label text as `missing` | 0.8115 | −0.0094 |
+| zero | 0.7853 | −0.0356 |
+
+Median wins because a single value of 100 among `[1, 2, ?]` drags the mean to
+34.3 while the median stays at 2.0. The default is defended by measurement, not
+by convention.
+
+### Column advice, on a messy real file
+
+FIFA 21 (18,207 rows × 89 columns). Prices (`€110.5M`), heights (`5'7`) and
+ratings (`88+2`) arrive as text; parsing them rescues **32 columns** that would
+otherwise be discarded as high-cardinality strings — including the two strongest
+predictors of `Overall`:
+
+| Column | Verdict | Relevance |
+|---|---|---|
+| `Value` | keep | 1.43 |
+| `Wage` | keep | 0.62 |
+| `CB`, `RDM`, `LB` … | keep | 0.44–0.55 |
+| `PassengerId`-style counters | drop | running row number |
+| `Cabin` (77% empty) | drop | mostly missing |
+
+### Scale
+
+| Dataset | Rows × cols | Result |
+|---|---|---|
+| Cardiovascular disease | 308,854 × 19 | 11/11 models trained |
+| Diabetes prediction | 100,000 × 9 | best: LightGBM |
+| FIFA 21 | 18,207 × 89 | R² 0.9901 on `Overall` |
+| Titanic | 896 × 12 | macro F1 0.8109 (SVM) |
 
 ## Features
 
@@ -149,7 +215,7 @@ size, so "80% of rows are one category" outranks "3 values are missing".
 | Infra | Docker, docker-compose |
 | Stats | SciPy (t-test, ANOVA, chi-square, Kruskal-Wallis, linear regression for trends) |
 | Lint | ESLint (`next/core-web-vitals`) with `@typescript-eslint/no-use-before-define` — runs as part of `npm run build` |
-| Tests | pytest (174 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
+| Tests | pytest (178 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
 
 ## Project structure
 
@@ -158,7 +224,9 @@ ai-data-scientist/
 ├── backend/
 │   ├── app/
 │   │   ├── agents/            # pipeline agent, explanation engine, LLM client,
-│   │   │                      #   analyst (question → QuerySpec), insights
+│   │   │                      #   analyst (question → QuerySpec), insights,
+│   │   │                      #   feature advisor, feature engineer, improver,
+│   │   │                      #   tuner, dashboard, live progress
 │   │   ├── tools/             # the real math: data tools, query engine, analytics
 │   │   │                      #   (time series + significance), Plotly viz, report builder
 │   │   ├── services/          # dataset, analysis, ML, report, chat orchestration
@@ -295,6 +363,7 @@ Base URL: `/api` — full interactive docs at `/docs`.
 | `POST` | `/datasets/{id}/suggest-features` | Screen and rank input columns, with a measured comparison `{target?, problem_type?}` |
 | `POST` | `/datasets/{id}/dashboard` | KPI tiles + charts for a filtered slice `{filters?, measure?, dimension?, date_column?}` |
 | `GET` | `/datasets/{id}/insights` | Ranked automatic findings |
+| `GET` | `/datasets/{id}/progress` | Live stage of a running analysis or training |
 | `POST` | `/datasets/{id}/report` | Generate the Markdown report |
 | `GET` | `/reports/{id}/download` | Download the report file |
 
@@ -324,7 +393,17 @@ pip install -r requirements.txt
 pytest
 ```
 
-174 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
+```
+177 passed, 1 skipped in ~70s
+```
+
+Frontend lint (also runs as part of `npm run build`):
+
+```bash
+cd frontend && npm run lint
+```
+
+178 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
 
 The analyst suite additionally asserts that the query engine **rejects** unknown columns,
 non-numeric aggregations and near-unique groupings; that aggregation results match pandas

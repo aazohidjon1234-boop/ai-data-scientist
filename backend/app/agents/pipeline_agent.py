@@ -146,6 +146,7 @@ class DataScientistAgent:
         problem_type: str | None = None,
         k_range: tuple[int, int] | None = None,
         features: list[str] | None = None,
+        drop_outliers: bool = False,
     ) -> dict[str, Any]:
         settings = self.settings
         trace = AgentTrace()
@@ -177,6 +178,25 @@ class DataScientistAgent:
                 "No target column could be detected and none was provided. "
                 "Choose a target column (or select 'Clustering' as the task)."
             )
+
+        # Optionally drop rows that sit outside 1.5xIQR on a numeric column.
+        # Only ever applied when the caller asked for it, because throwing away
+        # observations is a modelling decision, not a cleaning detail.
+        outlier_report: dict[str, Any] | None = None
+        if drop_outliers and ptype != "clustering":
+            from .improver import outlier_mask
+
+            with ToolTimer(trace, "detect_outliers", {"action": "drop rows"}) as t:
+                inputs = [c for c in clean_df.columns if c != tcol]
+                mask = outlier_mask(clean_df, inputs)
+                removed = int(mask.sum())
+                if removed and removed < len(clean_df) * 0.5:
+                    clean_df = clean_df[~mask]
+                    outlier_report = {"rows_removed": removed, "rows_left": int(len(clean_df))}
+                    t.ok(f"Removed {removed} outlier rows; {len(clean_df)} left")
+                else:
+                    outlier_report = {"rows_removed": 0, "rows_left": int(len(clean_df))}
+                    t.ok("No rows removed (none flagged, or too many to drop safely)")
 
         # downsample huge datasets for training speed (ranking is stable)
         work = clean_df
@@ -210,6 +230,7 @@ class DataScientistAgent:
             "n_train_rows_used": int(X.shape[0]),
             "n_features": int(X.shape[1]),
             "sampled": sampled,
+            "outliers_dropped": outlier_report,
             "split": f"train {int((1 - settings.train_test_ratio) * 100)}% / test {int(settings.train_test_ratio * 100)}%",
             "class_labels": prep_report.get("class_labels"),
         }

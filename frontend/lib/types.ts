@@ -305,3 +305,33 @@ export interface DashboardResult {
   empty: boolean;
   tools_used: string[];
 }
+
+export interface ImproveRecipe {
+  key: string;
+  label: string;
+  why: string;
+  score: number | null;
+  delta: number | null;
+  best_model: string | null;
+  rows_used: number;
+  features_used: number;
+  changes: { features: string[] | null; drop_outliers: boolean };
+}
+
+export interface ImproveResult {
+  target: string;
+  problem_type: ProblemType;
+  metric: string;
+  folds: number;
+  baseline_score: number | null;
+  recommended: string;
+  recipes: ImproveRecipe[];
+  outliers: {
+    rows_flagged: number;
+    pct: number;
+    columns_checked: string[];
+    skipped_reason: string | null;
+  };
+  summary: string;
+  tools_used: string[];
+}

@@ -12,6 +12,7 @@ import ModelsSection from "@/components/ModelsSection";
 import AgentTimeline from "@/components/AgentTimeline";
 import ChatPanel from "@/components/ChatPanel";
 import AnalystPanel from "@/components/AnalystPanel";
+import ImprovePanel from "@/components/ImprovePanel";
 import TargetSelector from "@/components/TargetSelector";
 import PlotlyChart from "@/components/PlotlyChart";
 import Markdown from "@/components/Markdown";
@@ -65,6 +66,7 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
       target?: string | null;
       problem_type?: ProblemType | null;
       features?: string[] | null;
+      drop_outliers?: boolean;
     }) => {
       if (!id) return null;
       setBusy("train");
@@ -206,6 +208,16 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
 
       {/* Training configuration. Shown after a run too, so the target and the
           input columns can be changed and the run repeated. */}
+      {run && analysis && !busy && (
+        <ImprovePanel
+          datasetId={id}
+          target={run.target}
+          problemType={run.problem_type}
+          busy={!!busy}
+          onRetrain={(p) => doTrain(p)}
+        />
+      )}
+
       {analysis && !busy && (
         <TargetSelector
           analysis={analysis}

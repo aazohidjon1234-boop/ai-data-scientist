@@ -7,6 +7,7 @@ import type {
   DatasetSchema,
   FeatureSuggestion,
   Figure,
+  ImproveResult,
   InsightsResult,
   ModelRun,
   ProblemType,
@@ -75,6 +76,7 @@ export const api = {
       problem_type?: ProblemType | null;
       k?: number | null;
       features?: string[] | null;
+      drop_outliers?: boolean;
     },
   ) =>
     http<ModelRun>(`/api/datasets/${id}/train`, { method: "POST", body: JSON.stringify(payload) }),
@@ -110,6 +112,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  improve: (id: string) =>
+    http<ImproveResult>(`/api/datasets/${id}/improve`, { method: "POST", body: "{}" }),
   suggestFeatures: (id: string, target?: string | null, problem_type?: ProblemType | null) =>
     http<FeatureSuggestion>(`/api/datasets/${id}/suggest-features`, {
       method: "POST",

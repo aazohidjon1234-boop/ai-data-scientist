@@ -96,6 +96,9 @@ class TrainRequest(BaseModel):
         max_length=500,
         description="Input columns to train on. Omit to use every column except the target.",
     )
+    drop_outliers: bool = Field(
+        False, description="Remove rows outside 1.5xIQR on a numeric column before training"
+    )
 
 
 class ModelResultOut(BaseModel):
@@ -212,3 +215,8 @@ class DashboardRequest(BaseModel):
     measure: str | None = None
     dimension: str | None = None
     date_column: str | None = None
+
+
+class ImproveRequest(BaseModel):
+    target: str | None = None
+    problem_type: ProblemType | None = None

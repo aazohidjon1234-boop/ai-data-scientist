@@ -17,6 +17,7 @@ from ..models.db import Analysis, Dataset, ModelResult, Report
 from ..schemas.api import (
     AnalyzeRequest,
     DashboardRequest,
+    ImproveRequest,
     AnalysisOut,
     AskOut,
     AskRequest,
@@ -201,7 +202,8 @@ def train(dataset_id: str, body: TrainRequest | None = None, db: Session = Depen
     k = (body.k, min(body.k + 6, 12)) if body.k else None
     result = ml_service.run_training(db, dataset_id, target=body.target,
                                      problem_type=body.problem_type, k_range=k,
-                                     features=body.features)
+                                     features=body.features,
+                                     drop_outliers=body.drop_outliers)
     db.refresh(ds)
     return _training_out(db, ds)
 
@@ -274,6 +276,15 @@ def get_trend(dataset_id: str, body: TrendRequest | None = None, db: Session = D
 @router.post("/datasets/{dataset_id}/segments")
 def get_segments(dataset_id: str, body: SegmentRequest, db: Session = Depends(get_db)):
     return to_jsonable(analyst_service.segments(db, dataset_id, body.dimension, body.metric))
+
+
+@router.post("/datasets/{dataset_id}/improve")
+def improve_endpoint(dataset_id: str, body: ImproveRequest | None = None,
+                     db: Session = Depends(get_db)):
+    body = body or ImproveRequest()
+    return to_jsonable(
+        analyst_service.improvements(db, dataset_id, body.target, body.problem_type)
+    )
 
 
 @router.post("/datasets/{dataset_id}/dashboard")

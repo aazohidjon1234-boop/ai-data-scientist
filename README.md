@@ -39,6 +39,7 @@ The result is a serious, end-to-end working product you can put in front of a re
 | 📊 Metrics | MAE/MSE/RMSE/R² · Accuracy/Precision/Recall/F1 + confusion matrix · Silhouette/Inertia/cluster sizes — all from held-out test data |
 | 📉 Visualizations | Plotly histograms, box plots, correlation heatmap, target scatter pairs, category bars, missing-value chart, target distribution |
 | 🤖 Agent UX | Live tool-call timeline (the agent's actual activity), plan display, progress indicator, chat with grounded answers |
+| 🎯 Improve the score | Turns "remove the outliers and it'll be better" into a measurement: each option (drop weak columns, drop 1.5×IQR outlier rows, both) is cross-validated against the untouched baseline and the deltas are shown. Options that make things **worse** are reported as worse; one click applies a chosen recipe and retrains |
 | 📊 Dashboard | An **auto-composed** dashboard for any CSV: the schema decides what becomes a measure, a dimension or the timeline. KPI tiles, a trend line, breakdown bars, a distribution, a share donut and a cross-tab heatmap — all recomputed from pandas whenever you click a filter chip |
 | ❓ Ask the data | Natural-language questions answered by a **validated query spec** (filter / group / aggregate / sort), executed by pandas — never generated code. "Which region has the highest average revenue?" returns a sentence, a table and a chart |
 | 💡 Auto-insights | Unprompted ranked findings: strong correlations, dominant categories, significant segment gaps, trends, anomalies, skew and quality risks — each scored by effect size |
@@ -143,7 +144,7 @@ size, so "80% of rows are one category" outranks "3 values are missing".
 | Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS, react-plotly.js |
 | Infra | Docker, docker-compose |
 | Stats | SciPy (t-test, ANOVA, chi-square, Kruskal-Wallis, linear regression for trends) |
-| Tests | pytest (112 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
+| Tests | pytest (122 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
 
 ## Project structure
 
@@ -318,7 +319,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-112 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
+122 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
 
 The analyst suite additionally asserts that the query engine **rejects** unknown columns,
 non-numeric aggregations and near-unique groupings; that aggregation results match pandas

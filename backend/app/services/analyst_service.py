@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..agents.analyst import answer_question
 from ..agents.dashboard import build_dashboard
 from ..agents.feature_advisor import suggest_features
+from ..agents.improver import suggest_improvements
 from ..agents.insights import generate_insights
 from ..agents.llm_client import LLMClient
 from ..exceptions import ValidationError
@@ -140,3 +141,15 @@ def dashboard(db: Session, dataset_id: str, filters: list[Filter] | None,
     result["dataset_id"] = ds.id
     result["dataset_name"] = ds.name
     return result
+
+
+def improvements(db: Session, dataset_id: str, target: str | None,
+                 problem_type: str | None) -> dict[str, Any]:
+    ds, df = _frame(db, dataset_id)
+    run = ds.ml_run or {}
+    chosen = target or run.get("target") or (ds.analysis.target_column if ds.analysis else None)
+    kind = (problem_type or run.get("problem_type")
+            or (ds.analysis.problem_type if ds.analysis else None) or "classification")
+    if not chosen:
+        raise ValidationError("Train the model first — improvements are measured against a target.")
+    return suggest_improvements(df, chosen, kind)

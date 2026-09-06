@@ -52,22 +52,37 @@ class AgentTrace:
 class ToolTimer:
     """Context manager that measures a tool call and records it in a trace."""
 
-    def __init__(self, trace: AgentTrace, tool: str, args: dict[str, Any]):
+    def __init__(self, trace: AgentTrace, tool: str, args: dict[str, Any],
+                 dataset_id: str | None = None, label: str | None = None):
         self.trace = trace
         self.tool = tool
         self.args = args
         self.t0 = 0.0
+        # When a dataset is given the step is also published live, so the UI can
+        # show which stage is running instead of a generic spinner.
+        self.dataset_id = dataset_id
+        self.label = label or tool
 
     def __enter__(self):
         self.t0 = time.perf_counter()
+        if self.dataset_id:
+            from . import progress
+
+            progress.begin_stage(self.dataset_id, self.label,
+                                 ", ".join(f"{k}={v}" for k, v in list(self.args.items())[:3]))
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:
         return False
 
     def ok(self, observation: str) -> Step:
+        seconds = time.perf_counter() - self.t0
+        if self.dataset_id:
+            from . import progress
+
+            progress.end_stage(self.dataset_id, self.label, observation, seconds)
         return self.trace.record(self.tool, self.args, observation=observation,
-                                 status="ok", duration=time.perf_counter() - self.t0)
+                                 status="ok", duration=seconds)
 
     def fail(self, error: str) -> Step:
         return self.trace.record(self.tool, self.args, status="failed", error=error,

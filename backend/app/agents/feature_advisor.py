@@ -26,7 +26,7 @@ from sklearn.model_selection import cross_val_score
 
 from ..core.config import get_settings
 from ..exceptions import ValidationError
-from ..tools.data_tools import prepare_features
+from ..tools.data_tools import coerce_numeric_columns, prepare_features
 from ..utils.jsonutils import to_jsonable
 
 # A column whose values are nearly all distinct carries no pattern to learn —
@@ -169,6 +169,9 @@ def suggest_features(df: pd.DataFrame, target: str, problem_type: str) -> dict[s
             "Feature suggestion compares columns against a target, so it needs a supervised task."
         )
 
+    # Read "€110.5M" / "5'7" / "88+2" as numbers first, otherwise they are
+    # judged as high-cardinality text and dropped despite carrying real signal.
+    df, _coerced = coerce_numeric_columns(df)
     rows = len(df)
     candidates = [c for c in df.columns if c != target]
     screened: list[dict[str, Any]] = []

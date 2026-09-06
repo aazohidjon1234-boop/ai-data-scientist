@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { Analysis, Dataset, ModelRun, ProblemType, ReportInfo } from "@/lib/types";
+import type { Analysis, Dataset, ModelRun, PipelineProgress, ProblemType, ReportInfo } from "@/lib/types";
 import { taskLabel, timeAgo } from "@/lib/format";
 import { Badge, Button, Card, ErrorAlert, ProgressBar, Section, StatCard, Spinner } from "@/components/ui";
 import DataTable from "@/components/DataTable";
@@ -29,6 +29,7 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
   const [elapsed, setElapsed] = useState(0);
   const [report, setReport] = useState<ReportInfo | null>(null);
   const [tab, setTab] = useState<"models" | "activity" | "report">("models");
+  const [progress, setProgress] = useState<PipelineProgress | null>(null);
   const didAutoRun = useRef(false);
 
   useEffect(() => {
@@ -36,6 +37,30 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
     const t = setInterval(() => setElapsed(Math.round((Date.now() - startedAt) / 1000)), 500);
     return () => clearInterval(t);
   }, [startedAt]);
+
+  // While a run is in flight the server publishes which stage it is on, so the
+  // page can name the current step instead of showing an anonymous spinner.
+  useEffect(() => {
+    if (!busy || !id) {
+      setProgress(null);
+      return;
+    }
+    let alive = true;
+    const poll = async () => {
+      try {
+        const p = await api.progress(id);
+        if (alive) setProgress(p);
+      } catch {
+        /* the run itself reports failures; a missed poll is not worth showing */
+      }
+    };
+    poll();
+    const t = setInterval(poll, 1200);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [busy, id]);
 
   const doAnalyze = useCallback(
     async (target?: string | null) => {
@@ -172,17 +197,54 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
       {busy && (
         <Card className="p-5">
           <ProgressBar
-            label={
-              busy === "analyze"
-                ? "Agent is inspecting the dataset (profiling, quality checks, target detection)…"
-                : "Agent is cleaning the data and training models…"
+            label={progress?.current || (busy === "analyze" ? "Inspecting the dataset…" : "Preparing…")}
+            sub={
+              progress
+                ? `Step ${Math.min(progress.completed + 1, progress.total)} of ${progress.total} · ${progress.stage_elapsed}s on this step · ${progress.elapsed}s total`
+                : `${elapsed}s elapsed — real computation is running on the server`
             }
-            sub={`${elapsed}s elapsed — real computation is running on the server`}
+            value={progress && progress.total ? progress.completed / progress.total : undefined}
           />
-          {busy === "train" && (
-            <p className="mt-3 text-xs text-slate-500">
-              Cleaning → feature preparation → train/test split → training each model → evaluating →
-              comparing.
+
+          {progress && progress.planned.length > 0 && (
+            <ol className="mt-4 space-y-1.5">
+              {progress.planned.map((stage) => {
+                const finished = progress.done.some((d) => d.stage === stage);
+                const active = progress.current === stage;
+                const seconds = progress.done
+                  .filter((d) => d.stage === stage)
+                  .reduce((n, d) => n + d.seconds, 0);
+                return (
+                  <li key={stage} className="flex items-center gap-2 text-sm">
+                    <span className="w-4 shrink-0 text-center">
+                      {finished && !active ? "✓" : active ? "▶" : "·"}
+                    </span>
+                    <span
+                      className={
+                        active
+                          ? "font-medium text-indigo-600 dark:text-indigo-300"
+                          : finished
+                            ? "text-slate-600 dark:text-slate-300"
+                            : "text-slate-400 dark:text-slate-600"
+                      }
+                    >
+                      {stage}
+                    </span>
+                    {active && (
+                      <span className="text-xs text-slate-400">{progress.stage_elapsed}s</span>
+                    )}
+                    {finished && !active && seconds > 0 && (
+                      <span className="text-xs text-slate-400">{seconds.toFixed(1)}s</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+
+          {progress && progress.done.length > 0 && (
+            <p className="mt-3 truncate text-xs text-slate-500 dark:text-slate-400">
+              Last: {progress.done[progress.done.length - 1].observation}
             </p>
           )}
         </Card>

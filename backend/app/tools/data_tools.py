@@ -6,6 +6,7 @@ any AI-generated explanation can be invented: they all come from here.
 """
 from __future__ import annotations
 
+import re
 import time
 from typing import Any, Callable
 
@@ -169,6 +170,16 @@ def clean_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
     ops: list[str] = []
     out = df.copy()
 
+    # Prices, weights, heights and "88+2" ratings arrive as text. Without this
+    # they look like high-cardinality categories and get dropped, discarding
+    # some of the strongest signal in the file.
+    out, coerced = coerce_numeric_columns(out)
+    if coerced:
+        ops.append(
+            f"Read {len(coerced)} text column(s) as numbers: {', '.join(coerced[:8])}"
+            + (" …" if len(coerced) > 8 else "")
+        )
+
     all_nan = [c for c in out.columns if out[c].isna().all()]
     if all_nan:
         out = out.drop(columns=all_nan)
@@ -209,6 +220,7 @@ def clean_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
             "rows_before": int(df.shape[0]),
             "rows_after": int(out.shape[0]),
             "columns_removed": all_nan,
+            "coerced_to_numeric": coerced,
             "imputed": imputed,
         }
     )
@@ -797,3 +809,73 @@ def split_data(
         X, y, test_size=test_ratio, random_state=random_state, stratify=stratify
     )
     return X_train, X_test, y_train, y_test
+
+
+# --------------------------------------------------------------------------
+# tool: coerce_numeric_columns
+# --------------------------------------------------------------------------
+
+_CURRENCY_SUFFIX = {"k": 1e3, "m": 1e6, "b": 1e9}
+_NUMERIC_TEXT_RE = re.compile(r"^\s*[^\d\-+.]*\s*(-?\d+(?:[.,]\d+)?)\s*([kmb])?\s*[^\d]*$", re.I)
+_FEET_INCHES_RE = re.compile(r"^\s*(\d+)\s*'\s*(\d+(?:\.\d+)?)\s*\"?\s*$")
+_ADDITIVE_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*\+\s*(\d+(?:\.\d+)?)\s*$")
+MIN_PARSE_RATIO = 0.8
+
+
+def _parse_numeric_text(value: Any) -> float | None:
+    """Read a number out of text: '€110.5M', "5'7", '159lbs', '88+2', '1,250'."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+
+    feet = _FEET_INCHES_RE.match(text)
+    if feet:  # height -> inches, so the unit stays consistent
+        return float(feet.group(1)) * 12 + float(feet.group(2))
+
+    additive = _ADDITIVE_RE.match(text)
+    if additive:  # FIFA-style "88+2" ratings
+        return float(additive.group(1)) + float(additive.group(2))
+
+    match = _NUMERIC_TEXT_RE.match(text.replace(",", ""))
+    if not match:
+        return None
+    number = float(match.group(1).replace(",", "."))
+    suffix = (match.group(2) or "").lower()
+    return number * _CURRENCY_SUFFIX.get(suffix, 1.0)
+
+
+def numeric_from_text(series: pd.Series) -> pd.Series | None:
+    """Parsed numeric version of a text column, or None if it is really text."""
+    non_null = series.dropna()
+    if non_null.empty:
+        return None
+    parsed = non_null.map(_parse_numeric_text)
+    if parsed.notna().mean() < MIN_PARSE_RATIO:
+        return None
+    if parsed.dropna().nunique() <= 1:
+        return None
+    return series.map(_parse_numeric_text).astype(float)
+
+
+def coerce_numeric_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """Convert text columns that are really measurements.
+
+    Prices, weights, heights and additive ratings arrive as strings. Left alone
+    they look like high-cardinality categories and get dropped, throwing away
+    some of the strongest signal in the file.
+    """
+    out = df
+    converted: list[str] = []
+    for column in df.columns:
+        series = df[column]
+        if pd.api.types.is_numeric_dtype(series) or pd.api.types.is_bool_dtype(series):
+            continue
+        parsed = numeric_from_text(series)
+        if parsed is not None:
+            if out is df:
+                out = df.copy()
+            out[column] = parsed
+            converted.append(str(column))
+    return out, converted

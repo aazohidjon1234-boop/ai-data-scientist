@@ -166,15 +166,29 @@ export function Button({
   );
 }
 
-export function ProgressBar({ label, sub }: { label: string; sub?: string }) {
+export function ProgressBar({
+  label,
+  sub,
+  value,
+}: {
+  label: string;
+  sub?: string;
+  /** 0–1 when the real position is known; omit for an indeterminate bar. */
+  value?: number;
+}) {
+  const known = typeof value === "number" && Number.isFinite(value);
+  const pct = known ? Math.max(2, Math.min(100, value * 100)) : 50;
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-sm">
+      <div className="flex items-center justify-between gap-3 text-sm">
         <span className="font-medium text-slate-700 dark:text-slate-200">{label}</span>
-        {sub && <span className="text-xs text-slate-500">{sub}</span>}
+        {sub && <span className="shrink-0 text-xs text-slate-500">{sub}</span>}
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-        <div className="h-full w-1/2 animate-pulse rounded-full bg-indigo-500" />
+        <div
+          className={`h-full rounded-full bg-indigo-500 ${known ? "transition-all duration-500" : "animate-pulse"}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );

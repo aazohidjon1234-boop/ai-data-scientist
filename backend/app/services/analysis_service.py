@@ -4,6 +4,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from ..agents.pipeline_agent import DataScientistAgent
+from ..agents import progress
 from ..core.config import get_settings
 from ..utils.dataframe_store import load_csv_cached
 from ..models.db import Analysis
@@ -14,8 +15,18 @@ def run_analysis(db: Session, dataset_id: str, target_override: str | None = Non
     ds = get_dataset_or_404(db, dataset_id)
     df = load_csv_cached(ds.file_path)
 
-    agent = DataScientistAgent(df)
-    result = agent.analyze(target_override=target_override)
+    agent = DataScientistAgent(df, dataset_id=ds.id)
+    progress.start(ds.id, "analysis", [
+        "Reading the file", "Checking missing values", "Computing statistics",
+        "Measuring correlations", "Looking for outliers", "Deciding the task",
+        "Drawing charts", "Writing the explanation",
+    ])
+    try:
+        result = agent.analyze(target_override=target_override)
+    except Exception as exc:
+        progress.finish(ds.id, error=type(exc).__name__)
+        raise
+    progress.finish(ds.id)
 
     existing = db.query(Analysis).filter(Analysis.dataset_id == ds.id).first()
     if existing is None:

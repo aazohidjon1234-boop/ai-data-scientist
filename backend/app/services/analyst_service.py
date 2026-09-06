@@ -126,11 +126,27 @@ def suggested_questions(db: Session, dataset_id: str, limit: int = 6) -> list[st
 def feature_suggestion(db: Session, dataset_id: str, target: str | None,
                        problem_type: str | None) -> dict[str, Any]:
     ds, df = _frame(db, dataset_id)
-    chosen = target or (ds.analysis.target_column if ds.analysis else None)
-    kind = problem_type or (ds.analysis.problem_type if ds.analysis else None) or "classification"
+    analysed_target = ds.analysis.target_column if ds.analysis else None
+    chosen = target or analysed_target
     if not chosen:
         raise ValidationError("Pick a target column first — suggestions are relative to it.")
+    kind = problem_type or _problem_type_for(df, ds, chosen, analysed_target)
     return suggest_features(df, chosen, kind)
+
+
+def _problem_type_for(df: pd.DataFrame, ds: Dataset, target: str,
+                      analysed_target: str | None) -> str:
+    """Re-detect the task when the target moved.
+
+    Inheriting the stored type is only valid for the column it was detected on.
+    Reusing it after the user picks a different target silently asks for, say,
+    classification of a 48-value numeric column — which then fails to score.
+    """
+    if analysed_target == target and ds.analysis and ds.analysis.problem_type:
+        return ds.analysis.problem_type
+    from ..tools.data_tools import detect_problem_type
+
+    return detect_problem_type(df, target)["problem_type"]
 
 
 def dashboard(db: Session, dataset_id: str, filters: list[Filter] | None,

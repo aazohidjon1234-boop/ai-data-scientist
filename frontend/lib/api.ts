@@ -10,6 +10,7 @@ import type {
   ImproveResult,
   InsightsResult,
   ModelRun,
+  PipelineProgress,
   ProblemType,
   ReportInfo,
   SampleInfo,
@@ -80,6 +81,7 @@ export const api = {
     },
   ) =>
     http<ModelRun>(`/api/datasets/${id}/train`, { method: "POST", body: JSON.stringify(payload) }),
+  progress: (id: string) => http<PipelineProgress>(`/api/datasets/${id}/progress`),
   models: (id: string) => http<ModelRun>(`/api/datasets/${id}/models`),
   visualizations: (id: string) => http<{ dataset_id: string; figures: Figure[] }>(`/api/datasets/${id}/visualizations`),
   chat: (id: string, message: string) =>

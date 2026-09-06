@@ -278,6 +278,14 @@ def get_segments(dataset_id: str, body: SegmentRequest, db: Session = Depends(ge
     return to_jsonable(analyst_service.segments(db, dataset_id, body.dimension, body.metric))
 
 
+@router.get("/datasets/{dataset_id}/progress")
+def progress_endpoint(dataset_id: str, db: Session = Depends(get_db)):
+    from ..agents import progress as progress_tracker
+
+    _get_ds(db, dataset_id)
+    return progress_tracker.snapshot(dataset_id)
+
+
 @router.post("/datasets/{dataset_id}/improve")
 def improve_endpoint(dataset_id: str, body: ImproveRequest | None = None,
                      db: Session = Depends(get_db)):

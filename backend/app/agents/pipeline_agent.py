@@ -30,11 +30,36 @@ K_RANGE = (2, 9)  # K-Means search range
 
 
 class DataScientistAgent:
-    def __init__(self, df: pd.DataFrame, model_dir: Path | None = None):
+    # Human-readable stage names for the live progress indicator.
+    STAGE_LABELS = {
+        "analyze_dataset": "Reading the file",
+        "detect_missing_values": "Checking missing values",
+        "clean_dataset": "Cleaning the data",
+        "detect_outliers": "Looking for outliers",
+        "generate_statistics": "Computing statistics",
+        "generate_correlation_matrix": "Measuring correlations",
+        "detect_problem_type": "Deciding the task",
+        "prepare_features": "Preparing features",
+        "train_model": "Training models",
+        "evaluate_model": "Evaluating on held-out data",
+        "compare_models": "Comparing models",
+        "create_visualization": "Drawing charts",
+        "generate_report": "Writing the explanation",
+    }
+
+    def __init__(self, df: pd.DataFrame, model_dir: Path | None = None,
+                 dataset_id: str | None = None):
         self.settings = get_settings()
         self.df = df
         self.model_dir = model_dir  # when set, every trained model is persisted as .pkl
         self.llm = LLMClient()
+        # Only set for real runs; tests construct the agent without it.
+        self.dataset_id = dataset_id
+
+    def _step(self, trace, tool: str, args: dict[str, Any]) -> ToolTimer:
+        """A timed tool call that also publishes live progress."""
+        return ToolTimer(trace, tool, args, dataset_id=self.dataset_id,
+                         label=self.STAGE_LABELS.get(tool, tool))
 
     # ------------------------------------------------------------------ #
     # ANALYSIS
@@ -44,7 +69,7 @@ class DataScientistAgent:
         trace = AgentTrace()
         settings = self.settings
 
-        with ToolTimer(trace, "analyze_dataset", {"columns": len(df.columns)}) as t:
+        with self._step(trace, "analyze_dataset", {"columns": len(df.columns)}) as t:
             profile = data_tools.analyze_dataset(df)
             t.ok(
                 f"{profile['rows']} rows × {profile['columns']} columns; "
@@ -53,7 +78,7 @@ class DataScientistAgent:
                 f"{profile['duplicate_rows']} duplicates"
             )
 
-        with ToolTimer(trace, "detect_missing_values", {}) as t:
+        with self._step(trace, "detect_missing_values", {}) as t:
             missing = data_tools.detect_missing_values(df)
             worst = missing["per_column"][0] if missing["per_column"] else None
             obs = (
@@ -62,11 +87,11 @@ class DataScientistAgent:
             )
             t.ok(obs)
 
-        with ToolTimer(trace, "generate_statistics", {}) as t:
+        with self._step(trace, "generate_statistics", {}) as t:
             statistics = data_tools.generate_statistics(df)
             t.ok(f"Computed summary statistics for {len(statistics)} columns")
 
-        with ToolTimer(trace, "generate_correlation_matrix", {}) as t:
+        with self._step(trace, "generate_correlation_matrix", {}) as t:
             correlation = data_tools.generate_correlation_matrix(df)
             if correlation:
                 top = correlation["top_pairs"][0]
@@ -74,11 +99,11 @@ class DataScientistAgent:
             else:
                 t.ok("Fewer than 2 numeric columns — no correlation matrix", status="skipped")
 
-        with ToolTimer(trace, "detect_outliers", {}) as t:
+        with self._step(trace, "detect_outliers", {}) as t:
             outliers = data_tools.detect_outliers(df)
             t.ok(f"{outliers['total_outliers']} outlier values across {len(outliers['columns'])} columns (IQR rule)")
 
-        with ToolTimer(trace, "detect_problem_type", {"target": target_override}) as t:
+        with self._step(trace, "detect_problem_type", {"target": target_override}) as t:
             detection = data_tools.detect_problem_type(df, target=target_override)
             t.ok(detection["reasoning"])
 
@@ -87,7 +112,7 @@ class DataScientistAgent:
 
         # --- visuals (computed, not decorative) ---
         figures: list[dict[str, Any]] = []
-        with ToolTimer(trace, "create_visualization", {"kinds": ["histogram", "box", "bar", "missing", "scatter", "heatmap"]}) as t:
+        with self._step(trace, "create_visualization", {"kinds": ["histogram", "box", "bar", "missing", "scatter", "heatmap"]}) as t:
             figures += viz_tools.create_histograms(df)
             box = viz_tools.create_box_plot(df)
             if box:
@@ -125,7 +150,7 @@ class DataScientistAgent:
         analysis["plan"] = plan
 
         # --- interpretation (LLM if configured, else local engine) ---
-        with ToolTimer(trace, "generate_report", {"kind": "explanation"}) as t:
+        with self._step(trace, "generate_report", {"kind": "explanation"}) as t:
             local_text = explain_analysis(analysis)
             llm_text = None
             if self.llm.enabled:
@@ -152,15 +177,15 @@ class DataScientistAgent:
         trace = AgentTrace()
         t0 = time.perf_counter()
 
-        with ToolTimer(trace, "analyze_dataset", {"purpose": "reload for training"}) as t:
+        with self._step(trace, "analyze_dataset", {"purpose": "reload for training"}) as t:
             profile = data_tools.analyze_dataset(self.df)
             t.ok(f"{profile['rows']} rows × {profile['columns']} columns")
 
-        with ToolTimer(trace, "clean_dataset", {}) as t:
+        with self._step(trace, "clean_dataset", {}) as t:
             clean_df, clean_report = data_tools.clean_dataset(self.df)
             t.ok("; ".join(clean_report["operations"]))
 
-        with ToolTimer(trace, "detect_problem_type", {"target": target}) as t:
+        with self._step(trace, "detect_problem_type", {"target": target}) as t:
             detection = data_tools.detect_problem_type(clean_df, target=target)
             if problem_type:
                 detection["problem_type"] = problem_type
@@ -186,7 +211,7 @@ class DataScientistAgent:
         if drop_outliers and ptype != "clustering":
             from .improver import outlier_mask
 
-            with ToolTimer(trace, "detect_outliers", {"action": "drop rows"}) as t:
+            with self._step(trace, "detect_outliers", {"action": "drop rows"}) as t:
                 inputs = [c for c in clean_df.columns if c != tcol]
                 mask = outlier_mask(clean_df, inputs)
                 removed = int(mask.sum())
@@ -206,7 +231,7 @@ class DataScientistAgent:
             work = work.sample(n=settings.max_train_rows, random_state=settings.random_state)
             sampled = True
 
-        with ToolTimer(trace, "prepare_features", {
+        with self._step(trace, "prepare_features", {
             "target": tcol,
             "problem_type": ptype,
             "rows": int(work.shape[0]),
@@ -273,7 +298,7 @@ class DataScientistAgent:
                     })
 
                 for k in range(k_lo, k_hi + 1):
-                    with ToolTimer(trace, "evaluate_model", {"model": "K-Means", "k": k}) as tt:
+                    with self._step(trace, "evaluate_model", {"model": "K-Means", "k": k}) as tt:
                         try:
                             m, km = data_tools.evaluate_clustering(X, k, settings.random_state)
                             step = tt.ok(f"k={k}: silhouette={m['silhouette']:.3f}, sizes={m['cluster_sizes']}")
@@ -282,7 +307,7 @@ class DataScientistAgent:
                             _fail(f"K-Means (k={k})", e, tt)
 
                 for k in range(k_lo, k_hi + 1):
-                    with ToolTimer(trace, "evaluate_model", {"model": "Agglomerative", "k": k}) as tt:
+                    with self._step(trace, "evaluate_model", {"model": "Agglomerative", "k": k}) as tt:
                         try:
                             m, agg = data_tools.evaluate_agglomerative(X, k, settings.random_state)
                             step = tt.ok(f"k={k}: silhouette={m['silhouette']:.3f}, sizes={m['cluster_sizes']}")
@@ -292,7 +317,7 @@ class DataScientistAgent:
 
                 for eps in data_tools.DBSCAN_EPS_VALUES:
                     name = f"DBSCAN (eps={eps})"
-                    with ToolTimer(trace, "evaluate_model", {"model": "DBSCAN", "eps": eps}) as tt:
+                    with self._step(trace, "evaluate_model", {"model": "DBSCAN", "eps": eps}) as tt:
                         try:
                             m, db = data_tools.evaluate_dbscan(X, eps, 5, settings.random_state)
                             step = tt.ok(
@@ -309,7 +334,7 @@ class DataScientistAgent:
                     t.fail("All clustering algorithms failed")
             comparison = data_tools.compare_models(results, "clustering")
         else:
-            with ToolTimer(trace, "prepare_features", {"purpose": "train/test split"}) as t:
+            with self._step(trace, "prepare_features", {"purpose": "train/test split"}) as t:
                 X_train, X_test, y_train, y_test = data_tools.split_data(
                     X, y, ptype, settings.random_state, settings.train_test_ratio
                 )
@@ -323,13 +348,13 @@ class DataScientistAgent:
             for model_name in registry:
                 model_obj = None
                 try:
-                    with ToolTimer(trace, "train_model", {"model": model_name}) as tt:
+                    with self._step(trace, "train_model", {"model": model_name}) as tt:
                         model_obj, elapsed = data_tools.train_model(
                             model_name, ptype, X_train, y_train, settings.random_state
                         )
                         tt.ok(f"Trained in {elapsed:.2f}s")
                     self._save_artifact(model_name, model_obj)
-                    with ToolTimer(trace, "evaluate_model", {"model": model_name}) as tt:
+                    with self._step(trace, "evaluate_model", {"model": model_name}) as tt:
                         metrics = data_tools.evaluate_model(
                             model_obj, model_name, ptype,
                             X_train, X_test, y_train, y_test,
@@ -393,14 +418,14 @@ class DataScientistAgent:
             "total_seconds": round(time.perf_counter() - t0, 2),
         }
 
-        with ToolTimer(trace, "compare_models", {"metric": comparison.get("metric_key")}) as t:
+        with self._step(trace, "compare_models", {"metric": comparison.get("metric_key")}) as t:
             t.ok(
                 f"Best model: {best_name} "
                 f"({comparison['metric_key']}="
                 f"{comparison['ranked'][0]['primary_metric'] if comparison['ranked'] else 'n/a'})"
             )
 
-        with ToolTimer(trace, "generate_report", {"kind": "training-explanation"}) as t:
+        with self._step(trace, "generate_report", {"kind": "training-explanation"}) as t:
             local_text = explain_training(training)
             llm_text = None
             if self.llm.enabled:

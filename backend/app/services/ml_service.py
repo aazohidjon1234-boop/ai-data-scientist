@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..agents.pipeline_agent import DataScientistAgent, K_RANGE
+from ..agents import progress
 from ..core.config import get_settings
 from ..tools import data_tools
 from ..utils.dataframe_store import load_csv_cached
@@ -29,10 +30,19 @@ def run_training(
     df = load_csv_cached(ds.file_path)
 
     save_dir = Path(get_settings().model_dir) / ds.id
-    agent = DataScientistAgent(df, model_dir=save_dir)
-    result = agent.train(target=target, problem_type=problem_type, k_range=k_range,
-                         features=features,
-                         drop_outliers=drop_outliers)
+    agent = DataScientistAgent(df, model_dir=save_dir, dataset_id=ds.id)
+    progress.start(ds.id, "training", [
+        "Reading the file", "Checking missing values", "Cleaning the data",
+        "Deciding the task", "Preparing features", "Training models",
+        "Comparing models", "Writing the explanation",
+    ])
+    try:
+        result = agent.train(target=target, problem_type=problem_type, k_range=k_range,
+                             features=features, drop_outliers=drop_outliers)
+    except Exception as exc:
+        progress.finish(ds.id, error=type(exc).__name__)
+        raise
+    progress.finish(ds.id)
 
     run_id = uuid.uuid4().hex
     clear_ml_state(db, ds)

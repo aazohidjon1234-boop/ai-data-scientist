@@ -335,3 +335,18 @@ export interface ImproveResult {
   summary: string;
   tools_used: string[];
 }
+
+export interface PipelineProgress {
+  running: boolean;
+  phase: string | null;
+  current: string | null;
+  detail: string;
+  planned: string[];
+  done: { stage: string; observation: string; seconds: number }[];
+  completed: number;
+  total: number;
+  elapsed: number;
+  stage_elapsed: number;
+  finished: boolean;
+  error: string | null;
+}

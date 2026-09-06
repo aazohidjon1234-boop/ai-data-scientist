@@ -111,3 +111,34 @@ def test_explanation_uses_real_numbers(regression_dataset_id, client):
     a = _analyze(client, regression_dataset_id)
     assert str(a["profile"]["rows"]) in a["explanation"]
     assert str(a["profile"]["columns"]) in a["explanation"]
+
+
+# ------------------------------------------------- numeric text coercion
+def test_currency_weight_and_rating_text_is_read_as_numbers():
+    """Prices, heights and "88+2" ratings must not be treated as categories."""
+    import pandas as pd
+    from app.tools.data_tools import coerce_numeric_columns
+
+    df = pd.DataFrame({
+        "value": ["€110.5M", "€77M", "€1.5K"],
+        "height": ["5'7", "6'2", "5'9"],
+        "weight": ["159lbs", "183lbs", "150lbs"],
+        "rating": ["88+2", "91+3", "84+3"],
+        "name": ["L. Messi", "C. Ronaldo", "Neymar"],
+    })
+    out, converted = coerce_numeric_columns(df)
+    assert set(converted) == {"value", "height", "weight", "rating"}
+    assert "name" not in converted
+    assert out["value"].iloc[0] == 110_500_000
+    assert out["height"].iloc[0] == 67          # feet+inches -> inches
+    assert out["rating"].iloc[0] == 90          # 88+2
+    assert out["name"].iloc[0] == "L. Messi"    # untouched
+
+
+def test_coercion_leaves_real_text_alone():
+    import pandas as pd
+    from app.tools.data_tools import coerce_numeric_columns
+
+    df = pd.DataFrame({"city": ["Tashkent", "Samarkand", "Bukhara"]})
+    _, converted = coerce_numeric_columns(df)
+    assert converted == []

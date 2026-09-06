@@ -38,6 +38,8 @@ The result is a serious, end-to-end working product you can put in front of a re
 | 📈 Models | Regression (11): Linear, Ridge, Decision Tree, Random Forest, Extra Trees, Gradient Boosting, HistGradientBoosting, **XGBoost**, **LightGBM**, KNN, SVR · Classification (11): Logistic, Decision Tree, Random Forest, Extra Trees, Gradient Boosting, **XGBoost**, **LightGBM**, SVM, KNN, Naive Bayes, AdaBoost · Clustering: K-Means k-search, Agglomerative (Ward), DBSCAN eps-search — all scored by silhouette |
 | 📊 Metrics | MAE/MSE/RMSE/R² · Accuracy/Precision/Recall/F1 + confusion matrix · Silhouette/Inertia/cluster sizes — all from held-out test data |
 | 📉 Visualizations | Plotly histograms, box plots, correlation heatmap, target scatter pairs, category bars, missing-value chart, target distribution |
+| ⏱️ Live progress | The run publishes the stage it is on while it works — named step, per-step seconds, a real progress bar and the last observation — instead of a spinner that hides a minute of computation |
+| 🧾 Numeric text | Columns like `€110.5M`, `5'7`, `159lbs` and FIFA's `88+2` ratings are parsed into numbers during cleaning, so they are no longer mistaken for high-cardinality text and discarded |
 | 🤖 Agent UX | Live tool-call timeline (the agent's actual activity), plan display, progress indicator, chat with grounded answers |
 | 🎯 Improve the score | Turns "remove the outliers and it'll be better" into a measurement: each option (drop weak columns, drop 1.5×IQR outlier rows, both) is cross-validated against the untouched baseline and the deltas are shown. Options that make things **worse** are reported as worse; one click applies a chosen recipe and retrains |
 | 📊 Dashboard | An **auto-composed** dashboard for any CSV: the schema decides what becomes a measure, a dimension or the timeline. KPI tiles, a trend line, breakdown bars, a distribution, a share donut and a cross-tab heatmap — all recomputed from pandas whenever you click a filter chip |
@@ -144,7 +146,7 @@ size, so "80% of rows are one category" outranks "3 values are missing".
 | Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS, react-plotly.js |
 | Infra | Docker, docker-compose |
 | Stats | SciPy (t-test, ANOVA, chi-square, Kruskal-Wallis, linear regression for trends) |
-| Tests | pytest (122 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
+| Tests | pytest (131 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
 
 ## Project structure
 
@@ -319,7 +321,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-122 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
+131 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
 
 The analyst suite additionally asserts that the query engine **rejects** unknown columns,
 non-numeric aggregations and near-unique groupings; that aggregation results match pandas

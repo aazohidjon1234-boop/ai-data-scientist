@@ -75,14 +75,17 @@ class ToolTimer:
     def __exit__(self, exc_type, exc, tb) -> bool:
         return False
 
-    def ok(self, observation: str) -> Step:
+    def ok(self, observation: str, status: str = "ok") -> Step:
+        """Record a completed step. `status` allows "skipped" for a step that
+        legitimately had nothing to do — passing it used to raise TypeError and
+        turn a harmless skip into a failed run."""
         seconds = time.perf_counter() - self.t0
         if self.dataset_id:
             from . import progress
 
             progress.end_stage(self.dataset_id, self.label, observation, seconds)
         return self.trace.record(self.tool, self.args, observation=observation,
-                                 status="ok", duration=seconds)
+                                 status=status, duration=seconds)
 
     def fail(self, error: str) -> Step:
         return self.trace.record(self.tool, self.args, status="failed", error=error,

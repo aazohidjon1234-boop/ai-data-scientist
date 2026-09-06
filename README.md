@@ -28,7 +28,7 @@ The result is a serious, end-to-end working product you can put in front of a re
 
 | Area | Details |
 |---|---|
-| 📤 Ingestion | CSV upload (up to 100 MB / 1M rows) with type/size validation, auto-detected comma/semicolon/tab separators, safe UUID storage, bundled example datasets |
+| 📤 Ingestion | CSV upload (up to 100 MB / 1M rows) with type/size validation, comma/semicolon/tab/pipe separators detected on every read, not only on upload, safe UUID storage, bundled example datasets |
 | 🔍 EDA | Profile, per-column stats (mean/median/std/quartiles), missing-value audit, duplicate detection, IQR outliers, Pearson correlation matrix |
 | 🎯 Task detection | Heuristic target-column detection with scored candidates; auto-falls back to clustering; user override in the UI |
 | ✨ Column advice | Ask the agent which inputs to use: every column is screened (identifier, mostly empty, too many categories) and scored against the target with mutual information — then the recommendation is **cross-validated against the full set and both scores reported**, so "this improves accuracy" is a measurement, not a claim |
@@ -146,7 +146,7 @@ size, so "80% of rows are one category" outranks "3 values are missing".
 | Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS, react-plotly.js |
 | Infra | Docker, docker-compose |
 | Stats | SciPy (t-test, ANOVA, chi-square, Kruskal-Wallis, linear regression for trends) |
-| Tests | pytest (131 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
+| Tests | pytest (137 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
 
 ## Project structure
 
@@ -321,7 +321,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-131 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
+137 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
 
 The analyst suite additionally asserts that the query engine **rejects** unknown columns,
 non-numeric aggregations and near-unique groupings; that aggregation results match pandas

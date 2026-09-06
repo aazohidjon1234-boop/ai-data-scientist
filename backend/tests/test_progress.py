@@ -59,3 +59,14 @@ def test_endpoint_returns_a_snapshot(client, regression_dataset_id):
     r = client.get(f"/api/datasets/{regression_dataset_id}/progress")
     assert r.status_code == 200
     assert "running" in r.json()
+
+
+def test_a_step_can_be_marked_skipped():
+    """`ok(..., status="skipped")` used to raise TypeError and fail the run."""
+    from app.agents.base import AgentTrace, ToolTimer
+
+    trace = AgentTrace()
+    with ToolTimer(trace, "generate_correlation_matrix", {}) as t:
+        step = t.ok("Fewer than 2 numeric columns", status="skipped")
+    assert step.status == "skipped"
+    assert trace.to_dict()[0]["status"] == "skipped"

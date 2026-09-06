@@ -50,34 +50,19 @@ def validate_dataframe(df: pd.DataFrame) -> None:
 
 
 def parse_csv(content: bytes) -> pd.DataFrame:
-    """Parse uploaded CSV bytes; auto-detects comma/semicolon/tab separators.
+    """Parse uploaded CSV bytes, detecting comma/semicolon/tab/pipe separators.
 
-    Excel in many locales (UZ, RU, DE, FR, ...) saves CSVs with ';' instead
-    of ','. Without detection such files would be read as a single column.
+    Uses the same reader as every later read of the stored file, so a file
+    cannot arrive with 13 columns and come back as 1.
     """
-    import io
+    from ..utils.dataframe_store import read_csv_bytes
 
-    settings = get_settings()
     try:
-        df = pd.read_csv(io.BytesIO(content))
+        return read_csv_bytes(content)
     except Exception as e:  # noqa: BLE001 — csv module raises many types
         raise ValidationError(
             f"The file could not be parsed as CSV: {str(e)[:200]}"
         ) from e
-
-    if df.shape[1] == 1:
-        head = content[:65_536]
-        for sep in (";", "\t"):
-            if sep.encode() not in head:
-                continue
-            try:
-                alt = pd.read_csv(io.BytesIO(content), sep=sep)
-                if alt.shape[1] > 1:
-                    df = alt
-                    break
-            except Exception:  # noqa: BLE001
-                continue
-    return df
 
 
 def register_dataset(

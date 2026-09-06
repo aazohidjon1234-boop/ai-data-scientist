@@ -77,3 +77,71 @@ def test_upload_tab_separated_csv(client):
     r = upload_csv(client, content, "tab.csv")
     assert r.status_code == 201, r.text
     assert r.json()["columns"] == 3
+
+
+# ------------------------------------------------- separator consistency
+SEMICOLON_CSV = (
+    "id;age;height;weight;cardio\n"
+    + "\n".join(f"{i};{20 + i % 50};{150 + i % 40};{50 + i % 45};{i % 2}" for i in range(40))
+    + "\n"
+)
+
+
+def test_semicolon_file_keeps_its_columns_after_upload(client, tmp_path):
+    """Excel writes ';' in most non-US locales.
+
+    Detection used to run only on upload, so the file arrived with the right
+    column count and every later read returned a single column.
+    """
+    from app.utils.dataframe_store import read_csv_path
+    from app.services.dataset_service import parse_csv
+
+    on_upload = parse_csv(SEMICOLON_CSV.encode())
+    path = tmp_path / "semi.csv"
+    path.write_text(SEMICOLON_CSV)
+    on_reread = read_csv_path(path)
+
+    assert on_upload.shape[1] == 5
+    assert list(on_reread.columns) == list(on_upload.columns)
+    assert on_reread.shape == on_upload.shape
+
+
+def test_tab_separated_file_is_detected(tmp_path):
+    from app.utils.dataframe_store import read_csv_path
+
+    path = tmp_path / "t.tsv"
+    path.write_text("a\tb\tc\n1\t2\t3\n4\t5\t6\n")
+    assert read_csv_path(path).shape[1] == 3
+
+
+def test_plain_comma_file_is_unaffected(tmp_path):
+    from app.utils.dataframe_store import read_csv_path
+
+    path = tmp_path / "c.csv"
+    path.write_text("a,b\n1,2\n3,4\n")
+    df = read_csv_path(path)
+    assert list(df.columns) == ["a", "b"] and df.shape == (2, 2)
+
+
+def test_single_column_file_stays_single(tmp_path):
+    """A genuine one-column file must not be split by a stray separator."""
+    from app.utils.dataframe_store import read_csv_path
+
+    path = tmp_path / "one.csv"
+    path.write_text("note\nhello world\nsecond line\n")
+    assert read_csv_path(path).shape[1] == 1
+
+
+def test_semicolon_dataset_analyses_end_to_end(client):
+    """The crash this came from: 0 numeric columns -> correlation skipped."""
+    import io
+
+    r = client.post("/api/datasets/upload",
+                    files={"file": ("semi.csv", io.BytesIO(SEMICOLON_CSV.encode()), "text/csv")})
+    assert r.status_code == 201, r.text
+    ds_id = r.json()["id"]
+    assert r.json()["columns"] == 5
+
+    a = client.post(f"/api/datasets/{ds_id}/analyze", json={})
+    assert a.status_code == 200, a.text
+    assert a.json()["profile"]["columns"] == 5

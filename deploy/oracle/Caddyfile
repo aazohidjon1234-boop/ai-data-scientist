@@ -1,0 +1,24 @@
+# TLS is obtained and renewed automatically for SITE_ADDRESS.
+{$SITE_ADDRESS} {
+	encode gzip
+
+	# Uploads can be large; the API caps them itself via MAX_UPLOAD_MB.
+	request_body {
+		max_size 120MB
+	}
+
+	reverse_proxy backend:8000 {
+		# Training a model zoo takes minutes on a shared vCPU.
+		transport http {
+			read_timeout 600s
+			write_timeout 600s
+		}
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 10MB
+			roll_keep 3
+		}
+	}
+}

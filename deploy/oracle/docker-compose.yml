@@ -1,0 +1,78 @@
+# Backend stack for an Oracle Cloud Always Free ARM VM.
+#
+# Runs the API behind Caddy, which obtains and renews a real Let's Encrypt
+# certificate automatically. The frontend is NOT here — it lives on Vercel and
+# proxies /api/* to this host server-side.
+#
+# Postgres runs locally on the VM (24 GB of RAM makes an external database
+# unnecessary), but set DATABASE_URL in .env to use Neon instead.
+name: ai-data-scientist
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_data_scientist}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai} -d ${POSTGRES_DB:-ai_data_scientist}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      # Written in full by setup.sh. Compose does not reliably expand nested
+      # ${...} inside a default value, so it is not assembled here.
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      UPLOAD_DIR: /app/datasets
+      REPORT_DIR: /app/reports
+      MODEL_DIR: /app/models
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
+    volumes:
+      - appdata:/app/datasets
+      - reports:/app/reports
+      - models:/app/models
+    depends_on:
+      db:
+        condition: service_healthy
+    # Not published to the host: only Caddy may reach it.
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # e.g. 129-146-0-1.sslip.io — resolves to the IP embedded in the name, so
+      # Let's Encrypt can issue a certificate without buying a domain.
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  appdata:
+  reports:
+  models:
+  caddy_data:
+  caddy_config:

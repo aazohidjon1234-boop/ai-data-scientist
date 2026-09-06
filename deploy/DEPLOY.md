@@ -1,26 +1,47 @@
 # Free deployment guide
 
-Backend on **Hugging Face Spaces**, frontend on **Vercel**, database on
-**Neon**. All three have a free tier that needs no credit card.
+Backend on an **Oracle Cloud Always Free** ARM VM, frontend on **Vercel**.
 
 ```
-Browser ──► Vercel (Next.js)  ──/api/*──►  HF Space (FastAPI)  ──►  Neon (Postgres)
+Browser ──► Vercel (Next.js) ──/api/*──► Caddy (TLS) ──► FastAPI ──► Postgres
+                                         └───────── Oracle A1 VM ─────────┘
 ```
 
-The browser only ever talks to Vercel. Next.js proxies `/api/*` to the Space
-server-side, so there is no CORS setup and no API key ever reaches the client.
+The browser only ever talks to Vercel. Next.js proxies `/api/*` server-side, so
+there is no CORS setup and no API key ever reaches the client.
 
-## Why this split
+**Setup lives in [oracle/README.md](oracle/README.md).** One script does the VM
+side: `./deploy/oracle/setup.sh`.
 
-The backend needs ~190 MB of RAM just to import pandas + scikit-learn, and more
-while training. Free tiers with 512 MB (Render, Fly) sit uncomfortably close to
-that ceiling; a Space gets 16 GB. Vercel, meanwhile, is the best free host for
-Next.js but cannot run this backend — scikit-learn, XGBoost and LightGBM blow
-past its serverless bundle limit.
+## Why this split, and why not something simpler
+
+Measured peak memory while training the model zoo:
+
+| Dataset | Peak RSS |
+|---|---|
+| 500 rows | 264 MB |
+| 5,000 rows | 401 MB |
+| 10,000 rows | 717 MB |
+| 50,000 rows | 1,051 MB |
+
+That rules out most free tiers:
+
+| Option | Verdict |
+|---|---|
+| **Oracle Always Free** | 4 ARM cores, 24 GB RAM, free forever. Card required for identity only. **Used here.** |
+| Hugging Face Spaces | Docker Spaces now require a paid PRO plan; only Static Spaces are free. See [huggingface/](huggingface/) if you have PRO. |
+| Render free | 512 MB **and 0.1 CPU** — fails above ~5,000 rows and trains very slowly. Spins down after 15 min. |
+| Google Cloud Run | Technically fine (configurable RAM, scales to zero) and free in practice for this load. A reasonable alternative. |
+| Vercel (backend) | Cannot host it: scipy + pandas + sklearn + plotly far exceed the serverless bundle limit. Frontend only. |
+
+Vercel remains the best free host for the Next.js frontend.
 
 ---
 
-## 1. Database (Neon) — 5 minutes
+## Appendix: managed Postgres on Neon (optional)
+
+The Oracle setup runs Postgres on the VM. Use Neon instead by setting
+`DATABASE_URL` in `deploy/oracle/.env`.
 
 The Space filesystem is **wiped on every restart and rebuild**. Without an
 external database, every uploaded dataset and analysis disappears. Skip this
@@ -34,7 +55,7 @@ only if you are just demoing.
 
 Keep that string for step 2. Treat it as a password — it is one.
 
-## 2. Backend (Hugging Face Space)
+## Appendix: Hugging Face Space (requires a PRO plan)
 
 1. Create a Space: <https://huggingface.co/new-space> → **SDK: Docker**,
    template **Blank**, hardware **CPU basic (free)**.
@@ -75,7 +96,7 @@ Keep that string for step 2. Treat it as a password — it is one.
    `https://<user>-<space>.hf.space/api/health` → `{"status":"ok",...}`
    and `https://<user>-<space>.hf.space/docs` for the interactive API.
 
-## 3. Frontend (Vercel)
+## Frontend (Vercel)
 
 1. Push this repository to GitHub.
 2. <https://vercel.com/new> → import the repo.
@@ -85,48 +106,56 @@ Keep that string for step 2. Treat it as a password — it is one.
 
    | Name | Value |
    |---|---|
-   | `BACKEND_URL` | `https://<user>-<space>.hf.space` |
+   | `BACKEND_URL` | `https://<dashed-ip>.sslip.io` (from `setup.sh`) |
 
    No trailing slash. This is read at **build time** by `next.config.mjs`, so
    after changing it you must redeploy, not just restart.
 5. Deploy. Open the Vercel URL and upload a CSV.
 
-## 4. Verify
+## Verify
 
 ```bash
-SPACE=https://<user>-<space>.hf.space
-curl -s $SPACE/api/health
+API=https://<dashed-ip>.sslip.io
+curl -s $API/api/health
 
-ID=$(curl -s -X POST $SPACE/api/datasets/load-sample \
+ID=$(curl -s -X POST $API/api/datasets/load-sample \
       -H 'Content-Type: application/json' -d '{"name":"housing_sales"}' | jq -r .id)
-curl -s -X POST $SPACE/api/datasets/$ID/analyze -H 'Content-Type: application/json' -d '{}' | jq '.problem_type, .target_column'
+curl -s -X POST $API/api/datasets/$ID/analyze -H 'Content-Type: application/json' -d '{}' \
+  | jq '.problem_type, .target_column'
 ```
 
 Then do the same through the Vercel URL to confirm the proxy works.
 
 ## Notes and limits
 
-* **Sleep.** A free Space pauses after ~48 h without traffic and takes ~30 s to
-  wake on the next request. The first request after a sleep may time out in the
-  browser — reload once.
-* **Ephemeral files.** Uploaded CSVs, generated `.pkl` models and Markdown
-  reports live on the Space disk and are lost on restart. Rows in Postgres
-  survive; the files they point at do not. For durable files, add object
-  storage (e.g. Cloudflare R2 free tier) — not wired up yet.
-* **CPU only.** `deploy/requirements-deploy.txt` installs `xgboost-cpu`
-  instead of `xgboost`: identical API and version, but 5.8 MB instead of
-  ~370 MB, because the default wheel bundles CUDA libraries a CPU host can
-  never use. Verified as a drop-in (fit/predict on both regressor and
-  classifier).
-* **Training time.** 22 models on 2 free vCPUs is slower than your laptop.
-  `MAX_TRAIN_ROWS` (default 50 000) already subsamples large datasets; lower it
-  if requests time out.
-* **Rebuilding.** Re-run `prepare-space.sh`, then commit and push in
-  `build/hf-space` again.
+* **ARM.** The A1 shape is `aarch64`. Every dependency has an ARM wheel —
+  including LightGBM, which publishes under the older `manylinux2014_aarch64`
+  tag — so nothing compiles from source. The image is built on the VM itself,
+  so no cross-compilation is needed.
+* **libgomp.** The image installs `libgomp1`. LightGBM links against the system
+  copy while scikit-learn bundles its own; without it two of the 22 models fail
+  behind a misleading "LightGBM is not installed" message.
+* **Persistence.** Uploads, models and reports live in named Docker volumes and
+  survive `docker compose down` (but not `down -v`). Nothing is backed up
+  automatically.
+* **Capacity.** Oracle frequently answers "Out of host capacity" for free ARM
+  instances. Retry at other times or in another availability domain.
+* **Training time.** 22 models on 4 ARM cores is slower than a modern laptop but
+  workable. `MAX_TRAIN_ROWS` (default 50 000) subsamples large datasets; lower
+  it if requests time out.
+* **xgboost-cpu.** `deploy/requirements-deploy.txt` (used by the Hugging Face
+  image) swaps `xgboost` for `xgboost-cpu`: same API and version, 5.8 MB instead
+  of ~370 MB, because the default wheel bundles unusable CUDA libraries. The
+  Oracle image uses `backend/requirements.txt`; switch it too if image size
+  matters to you.
 
 ## Updating after code changes
 
 ```bash
-./deploy/huggingface/prepare-space.sh          # backend → refresh build/hf-space, commit, push
-git push                                        # frontend → Vercel redeploys from GitHub
+# backend — on the VM
+cd ~/ai-data-scientist && git pull
+docker compose -f deploy/oracle/docker-compose.yml up -d --build
+
+# frontend — Vercel redeploys automatically from GitHub
+git push
 ```

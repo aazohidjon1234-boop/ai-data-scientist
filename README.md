@@ -217,9 +217,9 @@ Point the backend at Postgres locally by setting `DATABASE_URL` in `backend/.env
 
 ### 3c. Deploy for free
 
-Backend on Hugging Face Spaces, frontend on Vercel, Postgres on Neon — no credit card.
-See **[deploy/DEPLOY.md](deploy/DEPLOY.md)**; `deploy/huggingface/prepare-space.sh` builds
-a ready-to-push Space directory.
+Backend on an Oracle Cloud Always Free ARM VM, frontend on Vercel.
+One script sets up the VM: `./deploy/oracle/setup.sh`.
+See **[deploy/DEPLOY.md](deploy/DEPLOY.md)** and **[deploy/oracle/README.md](deploy/oracle/README.md)**.
 
 ## Environment variables
 

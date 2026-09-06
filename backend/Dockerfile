@@ -6,6 +6,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+# LightGBM links against the system libgomp (scikit-learn bundles its own).
+# Without it `import lightgbm` fails and two models drop out of every run.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY backend/requirements.txt .

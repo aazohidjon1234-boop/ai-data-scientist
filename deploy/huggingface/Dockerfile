@@ -14,6 +14,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+# LightGBM links against the SYSTEM libgomp; unlike scikit-learn its wheel does
+# not bundle one. Without this, `import lightgbm` raises ImportError, which the
+# model zoo catches and reports as "LightGBM is not installed" — so two of the
+# 22 models would silently fail on every run with a misleading message.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY deploy/requirements-deploy.txt ./requirements.txt

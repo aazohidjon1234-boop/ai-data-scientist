@@ -148,6 +148,7 @@ size, so "80% of rows are one category" outranks "3 values are missing".
 | Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS, react-plotly.js |
 | Infra | Docker, docker-compose |
 | Stats | SciPy (t-test, ANOVA, chi-square, Kruskal-Wallis, linear regression for trends) |
+| Lint | ESLint (`next/core-web-vitals`) with `@typescript-eslint/no-use-before-define` — runs as part of `npm run build` |
 | Tests | pytest (174 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
 
 ## Project structure

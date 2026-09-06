@@ -1,0 +1,5 @@
+{
+  "label": "Customer Churn",
+  "description": "600 customer accounts with tenure, charges, contract type and support activity. Predict whether a customer churns (binary classification).",
+  "task": "classification \u2014 target: churned"
+}

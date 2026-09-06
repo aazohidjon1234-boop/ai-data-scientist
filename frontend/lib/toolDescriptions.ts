@@ -1,0 +1,15 @@
+export const TOOL_DESCRIPTIONS: Record<string, string> = {
+  analyze_dataset: "Profile shape, dtypes, duplicates and per-column summaries",
+  detect_missing_values: "Count missing values per column",
+  clean_dataset: "Remove empty columns/duplicates and impute missing values",
+  detect_outliers: "IQR-based outlier detection for numeric columns",
+  generate_statistics: "Mean, median, std, quartiles, min/max per column",
+  generate_correlation_matrix: "Pearson correlation matrix + strongest pairs",
+  create_visualization: "Build a Plotly figure from real data",
+  detect_problem_type: "Infer target column and task (regression / classification / clustering)",
+  prepare_features: "Encoding, scaling, dropping unusable columns, train/test split",
+  train_model: "Fit a scikit-learn model on the training split",
+  evaluate_model: "Compute metrics on the held-out test split",
+  compare_models: "Rank models by their primary metric and pick the best",
+  generate_report: "Assemble explanations / the Markdown report",
+};

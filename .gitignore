@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Deployment staging (regenerate with deploy/huggingface/prepare-space.sh)
+build/
+
+# Data & artifacts
+datasets/uploads/
+reports/*.md
+models/
+backend/data/
+*.db
+*.sqlite3
+
+# Env & secrets
+.env
+.env.local
+.env*.local
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store

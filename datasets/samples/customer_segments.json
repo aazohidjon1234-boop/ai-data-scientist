@@ -1,0 +1,5 @@
+{
+  "label": "Customer Segments",
+  "description": "400 customers with age, income, spend and visit frequency. No target column \u2014 the agent runs a K-Means cluster search and scores it with the silhouette coefficient.",
+  "task": "clustering \u2014 no target"
+}

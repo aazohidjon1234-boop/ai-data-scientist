@@ -1,0 +1,5 @@
+{
+  "label": "Housing Sales",
+  "description": "508 home sale records with price, size, age, neighborhood and amenities. Predict the sale price (regression). Contains a few duplicate rows and some missing values on purpose.",
+  "task": "regression \u2014 target: sale_price"
+}

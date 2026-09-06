@@ -211,6 +211,7 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
           analysis={analysis}
           busy={!!busy}
           hasRun={!!run}
+          datasetId={id}
           onTrain={(p) => doTrain(p)}
         />
       )}

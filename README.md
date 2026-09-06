@@ -31,6 +31,7 @@ The result is a serious, end-to-end working product you can put in front of a re
 | 📤 Ingestion | CSV upload (up to 100 MB / 1M rows) with type/size validation, auto-detected comma/semicolon/tab separators, safe UUID storage, bundled example datasets |
 | 🔍 EDA | Profile, per-column stats (mean/median/std/quartiles), missing-value audit, duplicate detection, IQR outliers, Pearson correlation matrix |
 | 🎯 Task detection | Heuristic target-column detection with scored candidates; auto-falls back to clustering; user override in the UI |
+| ✨ Column advice | Ask the agent which inputs to use: every column is screened (identifier, mostly empty, too many categories) and scored against the target with mutual information — then the recommendation is **cross-validated against the full set and both scores reported**, so "this improves accuracy" is a measurement, not a claim |
 | 🎚️ Run configuration | Before training, pick the **target (y)** and tick exactly which **input columns (X)** the models may use — with each column's type and missing-value share shown. Available for re-runs too, so you can compare feature sets. The target can never be selected as its own feature |
 | 🧹 Cleaning | Drop fully-empty columns, dedupe rows, median/mode imputation — every operation is logged |
 | 🧪 ML pipeline | Automatic feature prep (imputation → encode → scale → split, stratified for classification), per-model error isolation |
@@ -141,7 +142,7 @@ size, so "80% of rows are one category" outranks "3 values are missing".
 | Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS, react-plotly.js |
 | Infra | Docker, docker-compose |
 | Stats | SciPy (t-test, ANOVA, chi-square, Kruskal-Wallis, linear regression for trends) |
-| Tests | pytest (90 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
+| Tests | pytest (100 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
 
 ## Project structure
 
@@ -284,6 +285,7 @@ Base URL: `/api` — full interactive docs at `/docs`.
 | `POST` | `/datasets/{id}/pivot` | Pivot table `{index, columns, values, aggfunc}` |
 | `POST` | `/datasets/{id}/trend` | Time series `{date_column?, value_column?, agg, freq?}` |
 | `POST` | `/datasets/{id}/segments` | Compare groups with a significance test `{dimension, metric?}` |
+| `POST` | `/datasets/{id}/suggest-features` | Screen and rank input columns, with a measured comparison `{target?, problem_type?}` |
 | `GET` | `/datasets/{id}/insights` | Ranked automatic findings |
 | `POST` | `/datasets/{id}/report` | Generate the Markdown report |
 | `GET` | `/reports/{id}/download` | Download the report file |
@@ -314,7 +316,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-90 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
+100 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
 
 The analyst suite additionally asserts that the query engine **rejects** unknown columns,
 non-numeric aggregations and near-unique groupings; that aggregation results match pandas

@@ -26,6 +26,11 @@ os.environ["REPORT_DIR"] = str(_TMP / "reports")
 os.environ["SAMPLE_DIR"] = str(_TMP / "samples")
 os.environ["CORS_ORIGINS"] = "http://localhost:3000"
 
+# Tests must exercise the deterministic engine and must never call a real API,
+# whatever the developer happens to have configured in backend/.env. Explicit
+# environment beats the dotenv file in pydantic-settings, so this wins.
+os.environ["LLM_API_KEY"] = ""
+
 # fresh DB for each pytest session
 db_file = _TMP / "test.db"
 if db_file.exists():

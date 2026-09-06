@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Analysis, ProblemType } from "@/lib/types";
-import { Badge, Button, Card } from "./ui";
+import { api, ApiError } from "@/lib/api";
+import type { Analysis, FeatureSuggestion, ProblemType } from "@/lib/types";
+import { Badge, Button, Card, Spinner } from "./ui";
 
 type TrainPayload = {
   target?: string | null;
@@ -15,11 +16,13 @@ export default function TargetSelector({
   onTrain,
   busy,
   hasRun = false,
+  datasetId,
 }: {
   analysis: Analysis;
   onTrain: (payload: TrainPayload) => void;
   busy: boolean;
   hasRun?: boolean;
+  datasetId: string;
 }) {
   const info = analysis.profile.columns_info;
   const columns = useMemo(() => info.map((c) => c.name), [info]);
@@ -50,6 +53,33 @@ export default function TargetSelector({
     setFeatures((current) =>
       current.includes(name) ? current.filter((c) => c !== name) : [...current, name],
     );
+
+  const [advice, setAdvice] = useState<FeatureSuggestion | null>(null);
+  const [advising, setAdvising] = useState(false);
+  const [adviceError, setAdviceError] = useState<string | null>(null);
+
+  // Suggestions are relative to a target, so they are invalidated when it moves.
+  useEffect(() => {
+    setAdvice(null);
+    setAdviceError(null);
+  }, [target, mode]);
+
+  const askForAdvice = async () => {
+    setAdvising(true);
+    setAdviceError(null);
+    try {
+      // Problem type is left to the backend, which reads it from the analysis.
+      const result = await api.suggestFeatures(datasetId, target || suggested, null);
+      setAdvice(result);
+      setFeatures(result.recommended);
+    } catch (e) {
+      setAdviceError(e instanceof ApiError ? e.message : "Could not analyse the columns.");
+    } finally {
+      setAdvising(false);
+    }
+  };
+
+  const verdictOf = (name: string) => advice?.columns.find((c) => c.column === name);
 
   const meta = (name: string) => info.find((c) => c.name === name);
   const missingPct = (name: string) => {
@@ -118,6 +148,15 @@ export default function TargetSelector({
             </span>
           </div>
           <div className="flex gap-2">
+            {mode === "auto" && (
+              <button
+                onClick={askForAdvice}
+                disabled={advising || (!target && !suggested)}
+                className="rounded-md border border-indigo-400 bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-indigo-700 disabled:opacity-40"
+              >
+                {advising ? "Analysing…" : "✨ Suggest columns"}
+              </button>
+            )}
             <button
               onClick={() => setFeatures(selectable)}
               disabled={allChosen}
@@ -134,6 +173,27 @@ export default function TargetSelector({
             </button>
           </div>
         </div>
+
+        {advising && (
+          <div className="mt-2">
+            <Spinner label="Scoring each column against the target and cross-validating…" />
+          </div>
+        )}
+        {adviceError && (
+          <p className="mt-2 text-sm text-rose-600 dark:text-rose-400">{adviceError}</p>
+        )}
+        {advice && !advising && (
+          <div className="mt-2 rounded-lg border border-indigo-200 bg-white p-3 text-sm dark:border-indigo-500/30 dark:bg-slate-900">
+            <p className="text-slate-800 dark:text-slate-200">{advice.summary}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Scored with mutual information, then checked by {advice.evaluation.folds}-fold
+              cross-validation on {advice.evaluation.rows_used.toLocaleString()} rows using a{" "}
+              {advice.evaluation.model}. The {advice.recommended.length} recommended column
+              {advice.recommended.length === 1 ? " is" : "s are"} ticked below — change anything you
+              disagree with.
+            </p>
+          </div>
+        )}
 
         <div className="mt-2 grid max-h-64 gap-1 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900 sm:grid-cols-2">
           {selectable.map((name) => {
@@ -154,6 +214,17 @@ export default function TargetSelector({
                   {name}
                 </span>
                 <span className="ml-auto flex shrink-0 items-center gap-1">
+                  {(() => {
+                    const v = verdictOf(name);
+                    if (!v) return null;
+                    const tone =
+                      v.verdict === "keep" ? "green" : v.verdict === "drop" ? "red" : "amber";
+                    return (
+                      <span title={v.reason}>
+                        <Badge tone={tone}>{v.verdict}</Badge>
+                      </span>
+                    );
+                  })()}
                   <Badge tone={m?.kind === "numeric" ? "indigo" : "slate"}>
                     {m?.kind ?? "?"}
                   </Badge>

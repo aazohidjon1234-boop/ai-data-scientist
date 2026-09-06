@@ -66,7 +66,16 @@ export default function ModelsSection({ run }: { run: ModelRun }) {
             </thead>
             <tbody>
               {[...run.models]
-                .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))
+                // Rank first; fall back to the primary metric so the best model
+                // still leads even if ranking data is missing. Failed runs sink.
+                .sort((a, b) => {
+                  if (a.rank != null && b.rank != null) return a.rank - b.rank;
+                  if (a.rank != null) return -1;
+                  if (b.rank != null) return 1;
+                  const av = a.status === "ok" ? a.primary_metric ?? -Infinity : -Infinity;
+                  const bv = b.status === "ok" ? b.primary_metric ?? -Infinity : -Infinity;
+                  return bv - av;
+                })
                 .map((m) => (
                   <tr
                     key={m.name}

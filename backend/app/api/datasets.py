@@ -31,6 +31,7 @@ from ..schemas.api import (
     ReportOut,
     SampleInfo,
     SegmentRequest,
+    SuggestFeaturesRequest,
     TrainRequest,
     TrendRequest,
 )
@@ -272,6 +273,15 @@ def get_trend(dataset_id: str, body: TrendRequest | None = None, db: Session = D
 @router.post("/datasets/{dataset_id}/segments")
 def get_segments(dataset_id: str, body: SegmentRequest, db: Session = Depends(get_db)):
     return to_jsonable(analyst_service.segments(db, dataset_id, body.dimension, body.metric))
+
+
+@router.post("/datasets/{dataset_id}/suggest-features")
+def suggest_features_endpoint(dataset_id: str, body: SuggestFeaturesRequest | None = None,
+                              db: Session = Depends(get_db)):
+    body = body or SuggestFeaturesRequest()
+    return to_jsonable(
+        analyst_service.feature_suggestion(db, dataset_id, body.target, body.problem_type)
+    )
 
 
 @router.get("/datasets/{dataset_id}/insights", response_model=InsightsOut)

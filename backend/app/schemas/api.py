@@ -108,6 +108,9 @@ class ModelResultOut(BaseModel):
     feature_importance: list[dict[str, Any]] | None
     training_seconds: float
     is_best: bool
+    # 1 = best by the task's primary metric. Without this field the response
+    # model silently drops it and the table renders in registry order.
+    rank: int | None = None
     download_url: str | None = None
 
 
@@ -197,3 +200,8 @@ class AskOut(BaseModel):
     table: dict[str, Any]
     chart: dict[str, Any] | None = None
     tools_used: list[str]
+
+
+class SuggestFeaturesRequest(BaseModel):
+    target: str | None = None
+    problem_type: ProblemType | None = None

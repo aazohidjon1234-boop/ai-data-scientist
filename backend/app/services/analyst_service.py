@@ -11,6 +11,7 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from ..agents.analyst import answer_question
+from ..agents.feature_advisor import suggest_features
 from ..agents.insights import generate_insights
 from ..agents.llm_client import LLMClient
 from ..exceptions import ValidationError
@@ -117,3 +118,13 @@ def suggested_questions(db: Session, dataset_id: str, limit: int = 6) -> list[st
     if measures:
         questions.append(f"What is the average {measures[0]}?")
     return questions[:limit]
+
+
+def feature_suggestion(db: Session, dataset_id: str, target: str | None,
+                       problem_type: str | None) -> dict[str, Any]:
+    ds, df = _frame(db, dataset_id)
+    chosen = target or (ds.analysis.target_column if ds.analysis else None)
+    kind = problem_type or (ds.analysis.problem_type if ds.analysis else None) or "classification"
+    if not chosen:
+        raise ValidationError("Pick a target column first — suggestions are relative to it.")
+    return suggest_features(df, chosen, kind)

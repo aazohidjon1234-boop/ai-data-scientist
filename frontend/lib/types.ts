@@ -242,3 +242,30 @@ export interface TrendResult {
   anomalies: { period: string; value: number; z_score: number; direction: string }[];
   seasonality: { by_month?: { label: string; value: number }[]; by_weekday?: { label: string; value: number }[] } | null;
 }
+
+export interface FeatureVerdict {
+  column: string;
+  relevance: number;
+  verdict: "keep" | "weak" | "review" | "drop";
+  reason: string;
+  missing_pct: number;
+  unique: number;
+}
+
+export interface FeatureSuggestion {
+  target: string;
+  problem_type: ProblemType;
+  columns: FeatureVerdict[];
+  recommended: string[];
+  all_usable: string[];
+  evaluation: {
+    metric: string;
+    folds: number;
+    model: string;
+    score_all_usable: number | null;
+    score_recommended: number | null;
+    rows_used: number;
+  };
+  summary: string;
+  tools_used: string[];
+}

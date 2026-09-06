@@ -4,6 +4,7 @@ import type {
   Dataset,
   DatasetDetail,
   DatasetSchema,
+  FeatureSuggestion,
   Figure,
   InsightsResult,
   ModelRun,
@@ -94,6 +95,11 @@ export const api = {
     http<AskResult>(`/api/datasets/${id}/ask`, {
       method: "POST",
       body: JSON.stringify({ question }),
+    }),
+  suggestFeatures: (id: string, target?: string | null, problem_type?: ProblemType | null) =>
+    http<FeatureSuggestion>(`/api/datasets/${id}/suggest-features`, {
+      method: "POST",
+      body: JSON.stringify({ target: target || null, problem_type: problem_type || null }),
     }),
   insights: (id: string, limit = 12) =>
     http<InsightsResult>(`/api/datasets/${id}/insights?limit=${limit}`),

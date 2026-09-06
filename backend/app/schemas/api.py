@@ -102,6 +102,8 @@ class TrainRequest(BaseModel):
     tune: bool = Field(
         False, description="Run a randomised hyperparameter search on the winning model"
     )
+    impute_numeric: Literal["median", "mean", "zero"] = "median"
+    impute_categorical: Literal["mode", "constant"] = "mode"
 
 
 class ModelResultOut(BaseModel):

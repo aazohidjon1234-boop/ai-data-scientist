@@ -9,6 +9,8 @@ type TrainPayload = {
   target?: string | null;
   problem_type?: ProblemType | null;
   features?: string[] | null;
+  impute_numeric?: string;
+  impute_categorical?: string;
 };
 
 export default function TargetSelector({
@@ -67,6 +69,14 @@ export default function TargetSelector({
       current.includes(name) ? current.filter((c) => c !== name) : [...current, name],
     );
   };
+
+  const [imputeNumeric, setImputeNumeric] = useState("median");
+  const [imputeCategorical, setImputeCategorical] = useState("mode");
+
+  // Gaps in the columns that will actually be used; filling only matters there.
+  const gaps = chosen.filter((c) => (meta(c)?.missing ?? 0) > 0);
+  const numericGaps = gaps.filter((c) => meta(c)?.kind === "numeric");
+  const textGaps = gaps.filter((c) => meta(c)?.kind !== "numeric");
 
   const [advice, setAdvice] = useState<FeatureSuggestion | null>(null);
   const [advising, setAdvising] = useState(false);
@@ -262,14 +272,68 @@ export default function TargetSelector({
         )}
       </div>
 
+      {gaps.length > 0 && (
+        <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+          <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            Filling missing values{" "}
+            <span className="font-normal text-slate-500 dark:text-slate-400">
+              — {gaps.length} of the chosen column{gaps.length === 1 ? " has" : "s have"} gaps
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-4">
+            {numericGaps.length > 0 && (
+              <label className="text-xs text-slate-500 dark:text-slate-400">
+                Numeric ({numericGaps.length})
+                <select
+                  value={imputeNumeric}
+                  onChange={(e) => setImputeNumeric(e.target.value)}
+                  className="mt-1 block rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                >
+                  <option value="median">median (resists outliers)</option>
+                  <option value="mean">mean</option>
+                  <option value="zero">zero (a gap means none)</option>
+                </select>
+              </label>
+            )}
+            {textGaps.length > 0 && (
+              <label className="text-xs text-slate-500 dark:text-slate-400">
+                Text ({textGaps.length})
+                <select
+                  value={imputeCategorical}
+                  onChange={(e) => setImputeCategorical(e.target.value)}
+                  className="mt-1 block rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                >
+                  <option value="mode">most common value</option>
+                  <option value="constant">label it &quot;missing&quot;</option>
+                </select>
+              </label>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-slate-400">
+            Unsure? Train once, then let the improve panel measure which choice actually scores
+            better.
+          </p>
+        </div>
+      )}
+
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Button
           disabled={!canTrain}
           onClick={() =>
             onTrain(
               mode === "clustering"
-                ? { problem_type: "clustering", features: chosen }
-                : { target: target || suggested, features: chosen },
+                ? {
+                    problem_type: "clustering",
+                    features: chosen,
+                    impute_numeric: imputeNumeric,
+                    impute_categorical: imputeCategorical,
+                  }
+                : {
+                    target: target || suggested,
+                    features: chosen,
+                    impute_numeric: imputeNumeric,
+                    impute_categorical: imputeCategorical,
+                  },
             )
           }
         >

@@ -92,6 +92,9 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
       problem_type?: ProblemType | null;
       features?: string[] | null;
       drop_outliers?: boolean;
+      tune?: boolean;
+      impute_numeric?: string;
+      impute_categorical?: string;
     }) => {
       if (!id) return null;
       setBusy("train");

@@ -69,7 +69,8 @@ def _zoo(problem_type: str) -> list[tuple[str, Any]]:
 
 
 def _score(df: pd.DataFrame, target: str, problem_type: str,
-           features: list[str] | None) -> tuple[float | None, str | None]:
+           features: list[str] | None,
+           impute: tuple[str, str] = ("median", "mode")) -> tuple[float | None, str | None]:
     """Best cross-validated score across a few fast models, like the real run."""
     if df.empty:
         return None, None
@@ -77,7 +78,8 @@ def _score(df: pd.DataFrame, target: str, problem_type: str,
     if len(frame) > EVAL_ROWS:
         frame = frame.sample(n=EVAL_ROWS, random_state=get_settings().random_state)
     try:
-        X, y, _ = prepare_features(frame, target, problem_type, features)
+        X, y, _ = prepare_features(frame, target, problem_type, features,
+                                   numeric_strategy=impute[0], categorical_strategy=impute[1])
     except ValidationError:
         return None, None
     if y is None or X.shape[1] == 0 or len(X) < EVAL_FOLDS * 3:
@@ -105,6 +107,8 @@ def suggest_improvements(
     current_features: list[str] | None = None,
     current_drops_outliers: bool = False,
     current_best_model: str | None = None,
+    current_impute_numeric: str = "median",
+    current_impute_categorical: str = "mode",
 ) -> dict[str, Any]:
     """Compare options against the run the user actually has.
 
@@ -132,8 +136,10 @@ def suggest_improvements(
     recipes: list[dict[str, Any]] = []
 
     def add(key: str, label: str, why: str, frame: pd.DataFrame,
-            features: list[str] | None, changes: dict[str, Any]) -> None:
-        score, winner = _score(frame, target, problem_type, features)
+            features: list[str] | None, changes: dict[str, Any],
+            impute: tuple[str, str] | None = None) -> None:
+        score, winner = _score(frame, target, problem_type, features,
+                               impute or (current_impute_numeric, current_impute_categorical))
         recipes.append({
             "key": key, "label": label, "why": why, "score": score,
             "best_model": winner, "rows_used": int(len(frame)),
@@ -171,6 +177,30 @@ def suggest_improvements(
             add("both", "Informative columns and no outliers",
                 "Both changes together.", trimmed, selected,
                 {"features": selected, "drop_outliers": True})
+
+    # Filling strategy only matters when something is actually missing; offering
+    # it on a complete dataset would be a row that can never change anything.
+    inputs_with_gaps = [c for c in baseline_features if work[c].isna().any()]
+    if inputs_with_gaps:
+        numeric_gaps = [c for c in inputs_with_gaps if pd.api.types.is_numeric_dtype(work[c])]
+        text_gaps = [c for c in inputs_with_gaps if c not in numeric_gaps]
+        for strategy in ("mean", "zero"):
+            if numeric_gaps and strategy != current_impute_numeric:
+                add(f"impute_{strategy}", f"Fill numeric gaps with the {strategy}",
+                    f"{len(numeric_gaps)} numeric column(s) have gaps, currently filled with the "
+                    f"{current_impute_numeric}.",
+                    baseline_frame, baseline_features,
+                    {"features": current_features, "drop_outliers": current_drops_outliers,
+                     "impute_numeric": strategy, "impute_categorical": current_impute_categorical},
+                    impute=(strategy, current_impute_categorical))
+        if text_gaps and current_impute_categorical != "constant":
+            add("impute_constant", 'Label missing text as "missing"',
+                f"{len(text_gaps)} text column(s) have gaps, currently filled with the most "
+                "common value — which invents data that was never observed.",
+                baseline_frame, baseline_features,
+                {"features": current_features, "drop_outliers": current_drops_outliers,
+                 "impute_numeric": current_impute_numeric, "impute_categorical": "constant"},
+                impute=(current_impute_numeric, "constant"))
 
     # Tuning the winner, measured on the same folds as everything else.
     tuning: dict[str, Any] | None = None
@@ -239,6 +269,11 @@ def suggest_improvements(
                        and (best["score"] - base_score) >= MEANINGFUL_GAIN else "baseline",
         "recipes": recipes,
         "tuning": tuning,
+        "imputation": {
+            "numeric": current_impute_numeric,
+            "categorical": current_impute_categorical,
+            "columns_with_gaps": inputs_with_gaps,
+        },
         "outliers": {
             "rows_flagged": removed,
             "pct": round(loss * 100, 2),

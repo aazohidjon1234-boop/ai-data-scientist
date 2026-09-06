@@ -79,6 +79,8 @@ export const api = {
       features?: string[] | null;
       drop_outliers?: boolean;
       tune?: boolean;
+      impute_numeric?: string;
+      impute_categorical?: string;
     },
   ) =>
     http<ModelRun>(`/api/datasets/${id}/train`, { method: "POST", body: JSON.stringify(payload) }),

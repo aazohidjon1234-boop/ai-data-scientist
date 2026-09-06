@@ -174,4 +174,6 @@ def improvements(db: Session, dataset_id: str, target: str | None,
         current_features=prep.get("selected_by_user"),
         current_drops_outliers=bool((run.get("run_info") or {}).get("outliers_dropped")),
         current_best_model=run.get("best_model"),
+        current_impute_numeric=(prep.get("imputation") or {}).get("numeric", "median"),
+        current_impute_categorical=(prep.get("imputation") or {}).get("categorical", "mode"),
     )

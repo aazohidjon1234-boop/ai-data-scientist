@@ -173,6 +173,8 @@ class DataScientistAgent:
         features: list[str] | None = None,
         drop_outliers: bool = False,
         tune: bool = False,
+        impute_numeric: str = "median",
+        impute_categorical: str = "mode",
     ) -> dict[str, Any]:
         settings = self.settings
         trace = AgentTrace()
@@ -238,7 +240,10 @@ class DataScientistAgent:
             "rows": int(work.shape[0]),
             "chosen_inputs": len(features) if features else "all",
         }) as t:
-            X, y, prep_report = data_tools.prepare_features(work, tcol, ptype, features)
+            X, y, prep_report = data_tools.prepare_features(
+                work, tcol, ptype, features,
+                numeric_strategy=impute_numeric, categorical_strategy=impute_categorical,
+            )
             t.ok(
                 f"{prep_report['n_features']} features "
                 f"({len(prep_report['numeric_features'])} numeric scaled, "

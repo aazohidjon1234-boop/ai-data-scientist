@@ -318,11 +318,22 @@ export interface ImproveRecipe {
   best_model: string | null;
   rows_used: number;
   features_used: number;
-  changes: { features: string[] | null; drop_outliers: boolean; tune?: boolean };
+  changes: {
+    features: string[] | null;
+    drop_outliers: boolean;
+    tune?: boolean;
+    impute_numeric?: string;
+    impute_categorical?: string;
+  };
   params?: Record<string, unknown>;
 }
 
 export interface ImproveResult {
+  imputation?: {
+    numeric: string;
+    categorical: string;
+    columns_with_gaps: string[];
+  };
   tuning?: {
     model: string;
     params: Record<string, unknown>;

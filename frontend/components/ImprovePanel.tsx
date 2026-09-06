@@ -12,6 +12,8 @@ type TrainPayload = {
   features?: string[] | null;
   drop_outliers?: boolean;
   tune?: boolean;
+  impute_numeric?: string;
+  impute_categorical?: string;
 };
 
 export default function ImprovePanel({
@@ -59,6 +61,8 @@ export default function ImprovePanel({
       features: r.changes.features,
       drop_outliers: r.changes.drop_outliers,
       tune: Boolean(r.changes.tune),
+      impute_numeric: r.changes.impute_numeric,
+      impute_categorical: r.changes.impute_categorical,
     });
 
   /** Test everything and retrain on the winner — the whole loop in one click. */
@@ -209,6 +213,12 @@ export default function ImprovePanel({
             <Badge tone="amber">
               {result.outliers.rows_flagged} outlier rows ({result.outliers.pct}%)
             </Badge>
+            {result.imputation && (
+              <Badge tone="slate">
+                filling gaps: {result.imputation.numeric} / {result.imputation.categorical}
+                {result.imputation.columns_with_gaps.length === 0 && " (nothing missing)"}
+              </Badge>
+            )}
             {result.outliers.skipped_reason && (
               <span>Outlier removal skipped: {result.outliers.skipped_reason}.</span>
             )}

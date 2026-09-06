@@ -33,7 +33,7 @@ The result is a serious, end-to-end working product you can put in front of a re
 | 🎯 Task detection | Heuristic target-column detection with scored candidates; auto-falls back to clustering; user override in the UI |
 | ✨ Column advice | Ask the agent which inputs to use: every column is screened (identifier, mostly empty, too many categories) and scored against the target with mutual information — then the recommendation is **cross-validated against the full set and both scores reported**, so "this improves accuracy" is a measurement, not a claim |
 | 🎚️ Run configuration | Before training, pick the **target (y)** and tick exactly which **input columns (X)** the models may use — with each column's type and missing-value share shown. The selection persists across re-runs — the page restores what the last run actually used instead of resetting to every column. The target can never be selected as its own feature |
-| 🧹 Cleaning | Drop fully-empty columns, dedupe rows, median/mode imputation — every operation is logged |
+| 🧹 Cleaning | Drop fully-empty columns, dedupe rows, and fill gaps with a **choice of strategy** — median (default, resists outliers), mean or zero for numbers; most-common or an explicit `missing` label for text. Offered in the UI only for columns that actually have gaps, and testable in the improve panel so the choice is measured rather than guessed. Every operation is logged |
 | 🧪 ML pipeline | Automatic feature prep (imputation → encode → scale → split, stratified for classification), per-model error isolation |
 | 📈 Models | Regression (11): Linear, Ridge, Decision Tree, Random Forest, Extra Trees, Gradient Boosting, HistGradientBoosting, **XGBoost**, **LightGBM**, KNN, SVR · Classification (11): Logistic, Decision Tree, Random Forest, Extra Trees, Gradient Boosting, **XGBoost**, **LightGBM**, SVM, KNN, Naive Bayes, AdaBoost · Clustering: K-Means k-search, Agglomerative (Ward), DBSCAN eps-search — all scored by silhouette |
 | 📊 Metrics | MAE/MSE/RMSE/R² · Accuracy/Precision/Recall/F1 + confusion matrix · Silhouette/Inertia/cluster sizes — all from held-out test data |
@@ -147,7 +147,7 @@ size, so "80% of rows are one category" outranks "3 values are missing".
 | Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS, react-plotly.js |
 | Infra | Docker, docker-compose |
 | Stats | SciPy (t-test, ANOVA, chi-square, Kruskal-Wallis, linear regression for trends) |
-| Tests | pytest (150 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
+| Tests | pytest (162 tests: upload, analysis, problem-type detection, training, metrics, API, query spec, time series, significance, insights) |
 
 ## Project structure
 
@@ -322,7 +322,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-150 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
+162 tests cover: CSV upload validation (valid/empty/wrong-extension/binary/header-only/all-NaN), profile & missing-value detection, statistics & correlations, target/task detection (regression/classification/clustering + overrides), real model training (metric ranges, best-model selection, confusion matrices, silhouette, feature importances, retrain semantics), and full API happy paths including reports and chat.
 
 The analyst suite additionally asserts that the query engine **rejects** unknown columns,
 non-numeric aggregations and near-unique groupings; that aggregation results match pandas

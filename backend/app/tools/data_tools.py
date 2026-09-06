@@ -165,8 +165,40 @@ def detect_missing_values(df: pd.DataFrame) -> dict[str, Any]:
 # tool: clean_dataset
 # --------------------------------------------------------------------------
 
-def clean_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
+NUMERIC_STRATEGIES = ("median", "mean", "zero")
+CATEGORICAL_STRATEGIES = ("mode", "constant")
+
+
+def _numeric_fill(series: pd.Series, strategy: str) -> float:
+    """The value a numeric column is filled with.
+
+    median is the default because a single extreme value drags the mean but not
+    the median; mean is offered for symmetric data, zero for counters where a
+    missing entry genuinely means none.
+    """
+    if strategy == "zero":
+        return 0.0
+    value = series.mean() if strategy == "mean" else series.median()
+    return 0.0 if pd.isna(value) else float(value)
+
+
+def _categorical_fill(series: pd.Series, strategy: str) -> str:
+    if strategy == "constant":
+        return "missing"
+    mode = series.mode(dropna=True)
+    return str(mode.iloc[0]) if len(mode) else "unknown"
+
+
+def clean_dataset(
+    df: pd.DataFrame,
+    numeric_strategy: str = "median",
+    categorical_strategy: str = "mode",
+) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Drop fully-empty columns and duplicate rows, impute missing values."""
+    if numeric_strategy not in NUMERIC_STRATEGIES:
+        raise ValidationError(f"Unknown numeric imputation '{numeric_strategy}'.")
+    if categorical_strategy not in CATEGORICAL_STRATEGIES:
+        raise ValidationError(f"Unknown categorical imputation '{categorical_strategy}'.")
     ops: list[str] = []
     out = df.copy()
 
@@ -196,22 +228,20 @@ def clean_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
         if n_missing == 0:
             continue
         if pd.api.types.is_numeric_dtype(out[c]):
-            fill = out[c].median()
-            if pd.isna(fill):
-                fill = 0
+            fill = _numeric_fill(out[c], numeric_strategy)
             out[c] = out[c].fillna(fill)
-            imputed[str(c)] = {"value": float(fill) if not pd.isna(fill) else 0.0, "strategy": "median", "count": n_missing}
+            imputed[str(c)] = {"value": fill, "strategy": numeric_strategy, "count": n_missing}
         else:
-            mode = out[c].mode(dropna=True)
-            fill = mode.iloc[0] if len(mode) else "unknown"
-            out[c] = out[c].fillna(str(fill))
-            imputed[str(c)] = {"value": str(fill), "strategy": "mode", "count": n_missing}
+            fill = _categorical_fill(out[c], categorical_strategy)
+            out[c] = out[c].fillna(fill)
+            imputed[str(c)] = {"value": fill, "strategy": categorical_strategy, "count": n_missing}
     for info in imputed.values():
         info["value"] = to_jsonable(info["value"])
     if imputed:
         ops.append(
             f"Imputed {sum(i['count'] for i in imputed.values())} missing value(s) "
-            f"in {len(imputed)} column(s) (median for numeric, mode for categorical)"
+            f"in {len(imputed)} column(s) "
+            f"({numeric_strategy} for numeric, {categorical_strategy} for categorical)"
         )
 
     report = to_jsonable(
@@ -415,6 +445,8 @@ def prepare_features(
     target: str | None,
     problem_type: str,
     features: list[str] | None = None,
+    numeric_strategy: str = "median",
+    categorical_strategy: str = "mode",
 ) -> tuple[pd.DataFrame, np.ndarray | None, dict[str, Any]]:
     """Turn a dataframe into a model-ready X/y pair.
 
@@ -473,10 +505,9 @@ def prepare_features(
     for c in data.columns:
         if data[c].isna().any():
             if pd.api.types.is_numeric_dtype(data[c]):
-                data[c] = data[c].fillna(data[c].median() if data[c].median() is not None and not pd.isna(data[c].median()) else 0)
+                data[c] = data[c].fillna(_numeric_fill(data[c], numeric_strategy))
             else:
-                mode = data[c].mode(dropna=True)
-                data[c] = data[c].fillna(str(mode.iloc[0]) if len(mode) else "unknown")
+                data[c] = data[c].fillna(_categorical_fill(data[c], categorical_strategy))
 
     num_cols = [c for c in data.columns if pd.api.types.is_numeric_dtype(data[c])]
     cat_cols = [c for c in data.columns if c not in num_cols]
@@ -522,6 +553,7 @@ def prepare_features(
             # What the user asked for, before automatic dropping — so the UI can
             # show that a chosen column was discarded and why.
             "selected_by_user": requested,
+            "imputation": {"numeric": numeric_strategy, "categorical": categorical_strategy},
             "source_columns": sorted(set(num_cols) | set(cat_cols)),
         }
     )

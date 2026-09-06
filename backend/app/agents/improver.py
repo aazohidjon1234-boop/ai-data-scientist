@@ -97,7 +97,19 @@ def _score(df: pd.DataFrame, target: str, problem_type: str,
     return best, winner
 
 
-def suggest_improvements(df: pd.DataFrame, target: str, problem_type: str) -> dict[str, Any]:
+def suggest_improvements(
+    df: pd.DataFrame,
+    target: str,
+    problem_type: str,
+    current_features: list[str] | None = None,
+    current_drops_outliers: bool = False,
+) -> dict[str, Any]:
+    """Compare options against the run the user actually has.
+
+    Measuring against the untouched data would keep returning the same table
+    after a recipe was applied, so "test again" looked frozen and an already
+    applied change was offered forever.
+    """
     if target not in df.columns:
         raise ValidationError(f"Target column '{target}' is not in this dataset.")
     if problem_type == "clustering":
@@ -127,21 +139,33 @@ def suggest_improvements(df: pd.DataFrame, target: str, problem_type: str) -> di
             "changes": changes,
         })
 
-    add("baseline", "Leave the data as it is",
-        "Everything usable, every row — the run you already have.",
-        work, usable, {"features": None, "drop_outliers": False})
+    # The baseline is whatever is in use right now, not the untouched file.
+    baseline_features = [c for c in (current_features or usable) if c in work.columns] or usable
+    baseline_frame = trimmed if (current_drops_outliers and trimmed is not None) else work
+    baseline_note = []
+    if current_features:
+        baseline_note.append(f"{len(baseline_features)} chosen column(s)")
+    if current_drops_outliers:
+        baseline_note.append("outlier rows already removed")
+    add("baseline", "Keep the current setup",
+        ("Your latest run: " + ", ".join(baseline_note) + ".") if baseline_note
+        else "Everything usable, every row — the run you already have.",
+        baseline_frame, baseline_features,
+        {"features": current_features, "drop_outliers": current_drops_outliers})
 
-    if selected and selected != usable:
+    same_features = sorted(selected) == sorted(baseline_features)
+    if selected and not same_features:
         add("features", "Train on the informative columns only",
-            f"Drops {len(usable) - len(selected)} column(s) that carry little signal.",
+            f"Uses {len(selected)} of {len(usable)} usable column(s) — drops the ones "
+            "carrying little signal.",
             work, selected, {"features": selected, "drop_outliers": False})
 
-    if trimmed is not None:
+    if trimmed is not None and not current_drops_outliers:
         add("outliers", "Remove outlier rows",
             f"Drops {removed} row(s) ({loss * 100:.1f}%) outside 1.5×IQR on a numeric column.",
-            trimmed, usable, {"features": None, "drop_outliers": True})
+            trimmed, baseline_features, {"features": current_features, "drop_outliers": True})
 
-        if selected and selected != usable:
+        if selected and not same_features:
             add("both", "Informative columns and no outliers",
                 "Both changes together.", trimmed, selected,
                 {"features": selected, "drop_outliers": True})
@@ -161,9 +185,9 @@ def suggest_improvements(df: pd.DataFrame, target: str, problem_type: str) -> di
         summary = "This dataset could not be scored reliably, so there is nothing to compare."
     elif best["key"] == "baseline" or (best["score"] - base_score) < MEANINGFUL_GAIN:
         summary = (
-            f"Nothing beat the current setup by a meaningful margin — baseline {metric} "
+            f"Nothing beat your current setup by a meaningful margin — it scores {metric} "
             f"{base_score:.4f}. The data is already in reasonable shape; more rows or new "
-            "features would help more than cleaning."
+            "features would help more than further cleaning."
         )
     else:
         summary = (

@@ -101,6 +101,9 @@ export interface ModelResult {
 }
 
 export interface ModelRun {
+  features_used?: string[] | null;
+  source_columns?: string[];
+  drop_outliers?: boolean;
   dataset_id: string;
   run_id: string;
   problem_type: ProblemType;

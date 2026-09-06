@@ -102,6 +102,7 @@ def _training_out(db: Session, ds: Dataset) -> dict[str, Any] | None:
     if t is None:
         return None
     run = ds.ml_run or {}
+    prep = run.get("prep_report") or {}
     models = []
     for m in t["models"]:
         m = dict(m)
@@ -118,6 +119,11 @@ def _training_out(db: Session, ds: Dataset) -> dict[str, Any] | None:
             "problem_type": t["problem_type"],
             "target": t["target"],
             "run_info": t.get("run_info", {}),
+            # What this run actually learned from, so the UI can restore the
+            # selection instead of silently resetting to every column.
+            "features_used": prep.get("selected_by_user"),
+            "source_columns": prep.get("source_columns", []),
+            "drop_outliers": bool((run.get("run_info") or {}).get("outliers_dropped")),
             "models": models,
             "best_model": t.get("best_model"),
             "explanation": t.get("explanation", ""),

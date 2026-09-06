@@ -97,3 +97,57 @@ def test_training_can_actually_drop_outliers(client, regression_dataset_id):
                     json={"target": "price", "drop_outliers": True})
     assert r.status_code == 200, r.text
     assert r.json()["best_model"]
+
+
+# ------------------------------------------------ baseline follows the run
+def test_baseline_reflects_the_current_feature_set(clinical):
+    """After a recipe is applied, the comparison must move with it.
+
+    Measuring against the untouched file made "test again" return the same
+    table forever and kept offering a change that was already in effect.
+    """
+    full = suggest_improvements(clinical, "target", "classification")
+    narrowed = suggest_improvements(
+        clinical, "target", "classification", current_features=["age", "pressure"]
+    )
+    base_full = next(r for r in full["recipes"] if r["key"] == "baseline")
+    base_narrow = next(r for r in narrowed["recipes"] if r["key"] == "baseline")
+    assert base_narrow["features_used"] == 2
+    assert base_full["features_used"] > base_narrow["features_used"]
+    assert base_narrow["changes"]["features"] == ["age", "pressure"]
+
+
+def test_an_already_applied_recipe_is_not_offered_again(clinical):
+    advice = suggest_improvements(clinical, "target", "classification")
+    recommended = next((r for r in advice["recipes"] if r["key"] == "features"), None)
+    if recommended is None:
+        pytest.skip("no feature recipe offered for this frame")
+
+    after = suggest_improvements(
+        clinical, "target", "classification",
+        current_features=recommended["changes"]["features"],
+    )
+    assert all(r["key"] != "features" for r in after["recipes"])
+
+
+def test_outlier_recipe_disappears_once_applied(clinical):
+    after = suggest_improvements(
+        clinical, "target", "classification", current_drops_outliers=True
+    )
+    assert all(r["key"] not in {"outliers", "both"} for r in after["recipes"])
+    base = next(r for r in after["recipes"] if r["key"] == "baseline")
+    assert base["changes"]["drop_outliers"] is True
+
+
+def test_training_response_reports_the_columns_it_used(client, regression_dataset_id):
+    r = client.post(f"/api/datasets/{regression_dataset_id}/train",
+                    json={"target": "price", "features": ["size", "rooms"]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["features_used"] == ["size", "rooms"]
+    assert set(body["source_columns"]) == {"size", "rooms"}
+
+
+def test_training_without_a_selection_reports_none(client, regression_dataset_id):
+    r = client.post(f"/api/datasets/{regression_dataset_id}/train", json={"target": "price"})
+    assert r.json()["features_used"] is None   # null == "everything"

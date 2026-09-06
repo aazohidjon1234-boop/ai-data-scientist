@@ -277,6 +277,7 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
           busy={!!busy}
           hasRun={!!run}
           datasetId={id}
+          usedFeatures={run?.features_used ?? null}
           onTrain={(p) => doTrain(p)}
         />
       )}

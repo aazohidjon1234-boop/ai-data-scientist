@@ -17,12 +17,15 @@ export default function TargetSelector({
   busy,
   hasRun = false,
   datasetId,
+  usedFeatures = null,
 }: {
   analysis: Analysis;
   onTrain: (payload: TrainPayload) => void;
   busy: boolean;
   hasRun?: boolean;
   datasetId: string;
+  /** Columns the latest run actually learned from; null means "all of them". */
+  usedFeatures?: string[] | null;
 }) {
   const info = analysis.profile.columns_info;
   const columns = useMemo(() => info.map((c) => c.name), [info]);
@@ -35,8 +38,17 @@ export default function TargetSelector({
     analysis.problem_type === "clustering" ? "clustering" : "auto",
   );
   const [target, setTarget] = useState<string>(suggested ?? "");
-  // Everything except the target, which is the behaviour before this existed.
-  const [features, setFeatures] = useState<string[]>(columns);
+  // Start from what the last run used, so a narrowed selection survives the
+  // retrain instead of silently resetting to every column.
+  const [features, setFeatures] = useState<string[]>(usedFeatures ?? columns);
+  const [touched, setTouched] = useState(false);
+
+  // A new run may have changed the columns; adopt them unless the user is
+  // mid-edit, in which case their choice wins.
+  useEffect(() => {
+    if (touched) return;
+    setFeatures(usedFeatures ?? columns);
+  }, [usedFeatures, columns, touched]);
 
   // The target can never also be an input — dropping it here keeps the count
   // honest instead of silently discarding it at training time.
@@ -49,10 +61,12 @@ export default function TargetSelector({
   const chosen = features.filter((c) => c !== activeTarget);
   const allChosen = chosen.length === selectable.length;
 
-  const toggle = (name: string) =>
+  const toggle = (name: string) => {
+    setTouched(true);
     setFeatures((current) =>
       current.includes(name) ? current.filter((c) => c !== name) : [...current, name],
     );
+  };
 
   const [advice, setAdvice] = useState<FeatureSuggestion | null>(null);
   const [advising, setAdvising] = useState(false);
@@ -71,6 +85,7 @@ export default function TargetSelector({
       // Problem type is left to the backend, which reads it from the analysis.
       const result = await api.suggestFeatures(datasetId, target || suggested, null);
       setAdvice(result);
+      setTouched(true);
       setFeatures(result.recommended);
     } catch (e) {
       setAdviceError(e instanceof ApiError ? e.message : "Could not analyse the columns.");
@@ -158,14 +173,14 @@ export default function TargetSelector({
               </button>
             )}
             <button
-              onClick={() => setFeatures(selectable)}
+              onClick={() => { setTouched(true); setFeatures(selectable); }}
               disabled={allChosen}
               className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 transition hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300"
             >
               Select all
             </button>
             <button
-              onClick={() => setFeatures([])}
+              onClick={() => { setTouched(true); setFeatures([]); }}
               disabled={chosen.length === 0}
               className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 transition hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300"
             >

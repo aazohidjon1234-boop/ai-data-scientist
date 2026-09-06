@@ -123,6 +123,9 @@ class ModelRunOut(BaseModel):
     problem_type: ProblemType
     target: str | None
     run_info: dict[str, Any]
+    features_used: list[str] | None = None
+    source_columns: list[str] = []
+    drop_outliers: bool = False
     models: list[ModelResultOut]
     best_model: str | None
     explanation: str

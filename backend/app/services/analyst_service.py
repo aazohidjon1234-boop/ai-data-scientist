@@ -168,4 +168,9 @@ def improvements(db: Session, dataset_id: str, target: str | None,
             or (ds.analysis.problem_type if ds.analysis else None) or "classification")
     if not chosen:
         raise ValidationError("Train the model first — improvements are measured against a target.")
-    return suggest_improvements(df, chosen, kind)
+    prep = run.get("prep_report") or {}
+    return suggest_improvements(
+        df, chosen, kind,
+        current_features=prep.get("selected_by_user"),
+        current_drops_outliers=bool((run.get("run_info") or {}).get("outliers_dropped")),
+    )

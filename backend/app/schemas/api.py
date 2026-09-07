@@ -136,6 +136,7 @@ class ModelRunOut(BaseModel):
     problem_type: ProblemType
     target: str | None
     run_info: dict[str, Any]
+    ranked_by: str | None = None
     features_used: list[str] | None = None
     source_columns: list[str] = []
     drop_outliers: bool = False

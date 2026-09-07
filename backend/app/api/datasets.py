@@ -123,6 +123,7 @@ def _training_out(db: Session, ds: Dataset) -> dict[str, Any] | None:
             "problem_type": t["problem_type"],
             "target": t["target"],
             "run_info": t.get("run_info", {}),
+            "ranked_by": (t.get("comparison") or {}).get("ranked_by"),
             # What this run actually learned from, so the UI can restore the
             # selection instead of silently resetting to every column.
             "features_used": prep.get("selected_by_user"),

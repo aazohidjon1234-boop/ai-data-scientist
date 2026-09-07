@@ -11,6 +11,8 @@ import type {
   InsightsResult,
   ModelRun,
   PipelineProgress,
+  PredictResult,
+  PredictSchema,
   ProblemType,
   ReportInfo,
   SampleInfo,
@@ -85,6 +87,16 @@ export const api = {
     },
   ) =>
     http<ModelRun>(`/api/datasets/${id}/train`, { method: "POST", body: JSON.stringify(payload) }),
+  deleteDataset: (id: string) =>
+    http<{ ok: boolean; name: string; freed_bytes: number }>(`/api/datasets/${id}`, {
+      method: "DELETE",
+    }),
+  predictSchema: (id: string) => http<PredictSchema>(`/api/datasets/${id}/predict/schema`),
+  predict: (id: string, rows: Record<string, unknown>[]) =>
+    http<PredictResult>(`/api/datasets/${id}/predict`, {
+      method: "POST",
+      body: JSON.stringify({ rows }),
+    }),
   progress: (id: string) => http<PipelineProgress>(`/api/datasets/${id}/progress`),
   models: (id: string) => http<ModelRun>(`/api/datasets/${id}/models`),
   visualizations: (id: string) => http<{ dataset_id: string; figures: Figure[] }>(`/api/datasets/${id}/visualizations`),

@@ -71,7 +71,8 @@ def _zoo(problem_type: str) -> list[tuple[str, Any]]:
 
 def _score(df: pd.DataFrame, target: str, problem_type: str,
            features: list[str] | None,
-           impute: tuple[str, str] = ("median", "mode")) -> tuple[float | None, str | None]:
+           impute: tuple[str, str] = ("median", "mode"),
+           balanced: bool = False) -> tuple[float | None, str | None]:
     """Best cross-validated score across a few fast models, like the real run."""
     if df.empty:
         return None, None
@@ -91,6 +92,11 @@ def _score(df: pd.DataFrame, target: str, problem_type: str,
 
     best, winner = None, None
     for name, model in _zoo(problem_type):
+        if balanced and hasattr(model, "set_params"):
+            try:
+                model.set_params(class_weight="balanced")
+            except (ValueError, TypeError):
+                pass
         try:
             score = float(np.mean(cross_val_score(model, X, y, cv=EVAL_FOLDS,
                                                   scoring=scoring, n_jobs=-1)))
@@ -111,6 +117,7 @@ def suggest_improvements(
     current_impute_numeric: str = "median",
     current_impute_categorical: str = "mode",
     current_engineered: list[dict[str, Any]] | None = None,
+    current_balances: bool = False,
 ) -> dict[str, Any]:
     """Compare options against the run the user actually has.
 
@@ -139,9 +146,10 @@ def suggest_improvements(
 
     def add(key: str, label: str, why: str, frame: pd.DataFrame,
             features: list[str] | None, changes: dict[str, Any],
-            impute: tuple[str, str] | None = None) -> None:
+            impute: tuple[str, str] | None = None, balanced: bool | None = None) -> None:
         score, winner = _score(frame, target, problem_type, features,
-                               impute or (current_impute_numeric, current_impute_categorical))
+                               impute or (current_impute_numeric, current_impute_categorical),
+                               current_balances if balanced is None else balanced)
         recipes.append({
             "key": key, "label": label, "why": why, "score": score,
             "best_model": winner, "rows_used": int(len(frame)),
@@ -203,6 +211,20 @@ def suggest_improvements(
                 {"features": current_features, "drop_outliers": current_drops_outliers,
                  "impute_numeric": current_impute_numeric, "impute_categorical": "constant"},
                 impute=(current_impute_numeric, "constant"))
+
+    # Balancing is only worth offering when the target is actually lopsided.
+    if problem_type == "classification" and not current_balances:
+        from ..tools.data_tools import class_balance
+
+        balance = class_balance(work[target])
+        if balance["imbalanced"]:
+            add("balanced", "Weight the classes by frequency",
+                f"The largest class is {balance['largest_share'] * 100:.0f}% of rows, so a model "
+                "can score well by mostly ignoring the rare one.",
+                baseline_frame, baseline_features,
+                {"features": current_features, "drop_outliers": current_drops_outliers,
+                 "balance_classes": True},
+                balanced=True)
 
     # Derived columns: only proposed when none are in play yet, so applying the
     # recipe does not offer to build the same interactions a second time.

@@ -104,6 +104,9 @@ class TrainRequest(BaseModel):
     )
     impute_numeric: Literal["median", "mean", "zero"] = "median"
     impute_categorical: Literal["mode", "constant"] = "mode"
+    balance_classes: bool = Field(
+        False, description="Weight classes inversely to their frequency where supported"
+    )
     engineered: list[dict[str, Any]] | None = Field(
         None, max_length=40, description="Derived column specs to build before training"
     )
@@ -122,6 +125,8 @@ class ModelResultOut(BaseModel):
     # 1 = best by the task's primary metric. Without this field the response
     # model silently drops it and the table renders in registry order.
     rank: int | None = None
+    cv_score: float | None = None
+    cv_std: float | None = None
     download_url: str | None = None
 
 
@@ -231,3 +236,8 @@ class DashboardRequest(BaseModel):
 class ImproveRequest(BaseModel):
     target: str | None = None
     problem_type: ProblemType | None = None
+
+
+class PredictRequest(BaseModel):
+    rows: list[dict[str, Any]] = Field(..., min_length=1, max_length=10_000)
+    model_name: str | None = Field(None, description="Defaults to the run's best model")

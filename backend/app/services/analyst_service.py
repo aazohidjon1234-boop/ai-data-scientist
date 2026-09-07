@@ -177,4 +177,5 @@ def improvements(db: Session, dataset_id: str, target: str | None,
         current_impute_numeric=(prep.get("imputation") or {}).get("numeric", "median"),
         current_impute_categorical=(prep.get("imputation") or {}).get("categorical", "mode"),
         current_engineered=(run.get("run_info") or {}).get("engineered_columns") or None,
+        current_balances=bool((run.get("run_info") or {}).get("balanced_weights")),
     )

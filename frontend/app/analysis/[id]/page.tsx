@@ -13,6 +13,7 @@ import AgentTimeline from "@/components/AgentTimeline";
 import ChatPanel from "@/components/ChatPanel";
 import AnalystPanel from "@/components/AnalystPanel";
 import ImprovePanel from "@/components/ImprovePanel";
+import PredictPanel from "@/components/PredictPanel";
 import TargetSelector from "@/components/TargetSelector";
 import PlotlyChart from "@/components/PlotlyChart";
 import Markdown from "@/components/Markdown";
@@ -346,6 +347,11 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
               </div>
 
               {tab === "models" && <ModelsSection run={run} />}
+              {tab === "models" && run && !busy && run.problem_type !== "clustering" && (
+                <div className="mt-5 border-t border-slate-200 pt-5 dark:border-slate-800">
+                  <PredictPanel datasetId={id} />
+                </div>
+              )}
               {tab === "models" && run && !busy && (
                 <div className="mt-5 border-t border-slate-200 pt-5 dark:border-slate-800">
                   <ImprovePanel

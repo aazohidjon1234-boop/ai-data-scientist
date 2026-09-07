@@ -16,7 +16,28 @@ const TASK_TONE: Record<string, "indigo" | "green" | "cyan"> = {
 
 export default function DashboardPage() {
   const [datasets, setDatasets] = useState<Dataset[] | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Removing the row alone would leave the CSV and every .pkl behind — the
+  // backend deletes those too and reports how much space came back.
+  const remove = async (id: string, name: string) => {
+    if (!window.confirm(`Delete "${name}" with its file and saved models? This cannot be undone.`))
+      return;
+    setDeleting(id);
+    try {
+      const res = await api.deleteDataset(id);
+      setDatasets((list) => (list ?? []).filter((d) => d.id !== id));
+      setNotice(`Deleted "${res.name}" — freed ${(res.freed_bytes / 1e6).toFixed(1)} MB.`);
+    } catch (e) {
+      setNotice(e instanceof ApiError ? e.message : "Could not delete that dataset.");
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   const refresh = () => {
     api
@@ -29,6 +50,11 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      {notice && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200">
+          {notice}
+        </div>
+      )}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
@@ -140,6 +166,14 @@ export default function DashboardPage() {
                         </td>
                         <td className="whitespace-nowrap px-4 py-2.5 text-slate-500">{timeAgo(d.created_at)}</td>
                         <td className="px-4 py-2.5 text-right">
+                          <button
+                            onClick={() => remove(d.id, d.name)}
+                            disabled={deleting === d.id}
+                            title="Delete this dataset, its file and its saved models"
+                            className="mr-3 text-slate-400 transition hover:text-rose-600 disabled:opacity-40 dark:hover:text-rose-400"
+                          >
+                            {deleting === d.id ? "…" : "Delete"}
+                          </button>
                           <Link
                             href={`/analysis/${d.id}`}
                             className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"

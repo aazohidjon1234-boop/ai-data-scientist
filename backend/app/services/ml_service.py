@@ -29,6 +29,7 @@ def run_training(
     impute_numeric: str = "median",
     impute_categorical: str = "mode",
     engineered: list[dict[str, Any]] | None = None,
+    balance_classes: bool = False,
 ) -> dict[str, Any]:
     ds = get_dataset_or_404(db, dataset_id)
     df = load_csv_cached(ds.file_path)
@@ -50,7 +51,8 @@ def run_training(
                              features=features, drop_outliers=drop_outliers,
                              tune=tune, impute_numeric=impute_numeric,
                              impute_categorical=impute_categorical,
-                             engineered=engineered)
+                             engineered=engineered,
+                             balance_classes=balance_classes)
     except Exception as exc:
         progress.finish(ds.id, error=type(exc).__name__)
         raise
@@ -117,6 +119,8 @@ def training_from_db(db: Session, ds) -> dict[str, Any] | None:
             "status_message": r.status_message,
             "primary_metric": r.primary_metric,
             "metrics": r.metrics or {},
+            "cv_score": (r.metrics or {}).get("cv_score"),
+            "cv_std": (r.metrics or {}).get("cv_std"),
             "feature_importance": r.feature_importance,
             "training_seconds": r.training_seconds,
             "is_best": r.is_best,

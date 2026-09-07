@@ -49,6 +49,12 @@ export default function ModelsSection({ run }: { run: ModelRun }) {
         </div>
       )}
 
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        {run.ranked_by === "cross_validation"
+          ? "Ranked by 5-fold cross-validation — on data this size a single hold-out split can hand first place to whichever model got the kinder split."
+          : "Ranked by the held-out test split."}
+      </p>
+
       <Card>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
@@ -60,6 +66,12 @@ export default function ModelsSection({ run }: { run: ModelRun }) {
                     {metricLabel(mk)}
                   </th>
                 ))}
+                <th
+                  className="px-3 py-2 text-right font-semibold text-slate-600 dark:text-slate-300"
+                  title="Cross-validated score — used for ranking when the data is small enough that one split is unreliable"
+                >
+                  CV
+                </th>
                 <th className="px-3 py-2 text-right font-semibold text-slate-600 dark:text-slate-300">Time (s)</th>
                 <th className="px-3 py-2 font-semibold text-slate-600 dark:text-slate-300">Status</th>
               </tr>
@@ -102,6 +114,18 @@ export default function ModelsSection({ run }: { run: ModelRun }) {
                         {m.metrics[mk] !== undefined ? fmtNum(m.metrics[mk]) : "—"}
                       </td>
                     ))}
+                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                      {m.cv_score != null ? (
+                        <>
+                          {fmtNum(m.cv_score)}
+                          {m.cv_std != null && (
+                            <span className="ml-1 text-xs text-slate-400">±{fmtNum(m.cv_std)}</span>
+                          )}
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fmtNum(m.training_seconds)}</td>
                     <td className="px-3 py-2">
                       {m.status === "ok" ? (

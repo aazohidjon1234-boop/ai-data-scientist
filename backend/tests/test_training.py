@@ -77,8 +77,14 @@ def test_classification_training(classification_dataset_id, client):
 
     assert run["best_model"] in {m["name"] for m in models}
     best = next(m for m in models if m["is_best"])
-    f1s = {m["name"]: m["metrics"]["f1"] for m in models}
-    assert f1s[run["best_model"]] == max(f1s.values())
+    # Ranking prefers the cross-validated score when every model has one, so the
+    # winner need not top the single hold-out split — that was the point.
+    if best.get("cv_score") is not None:
+        cvs = {m["name"]: m["cv_score"] for m in models if m.get("cv_score") is not None}
+        assert cvs[run["best_model"]] == max(cvs.values())
+    else:
+        f1s = {m["name"]: m["metrics"]["f1"] for m in models}
+        assert f1s[run["best_model"]] == max(f1s.values())
 
 
 def test_clustering_training(clustering_dataset_id, client):

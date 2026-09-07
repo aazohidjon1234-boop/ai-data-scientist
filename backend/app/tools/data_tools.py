@@ -528,21 +528,29 @@ def prepare_features(
         dropped.append(f"{c} (high cardinality: {n_u} unique values)")
 
     # impute whatever is left
+    fill_values: dict[str, Any] = {}
     for c in data.columns:
         if data[c].isna().any():
             if pd.api.types.is_numeric_dtype(data[c]):
-                data[c] = data[c].fillna(_numeric_fill(data[c], numeric_strategy))
+                fill_values[str(c)] = _numeric_fill(data[c], numeric_strategy)
             else:
-                data[c] = data[c].fillna(_categorical_fill(data[c], categorical_strategy))
+                fill_values[str(c)] = _categorical_fill(data[c], categorical_strategy)
+            data[c] = data[c].fillna(fill_values[str(c)])
 
     num_cols = [c for c in data.columns if pd.api.types.is_numeric_dtype(data[c])]
     cat_cols = [c for c in data.columns if c not in num_cols]
 
     scaled_cols = []
+    scaler_mean: dict[str, float] = {}
+    scaler_scale: dict[str, float] = {}
     if num_cols:
         scaler = StandardScaler()
         data[num_cols] = scaler.fit_transform(data[num_cols])
         scaled_cols = num_cols
+        # Kept as plain numbers: a pickled sklearn object would stop loading
+        # after a version bump, and this is all `transform` actually needs.
+        scaler_mean = {c: float(m) for c, m in zip(num_cols, scaler.mean_)}
+        scaler_scale = {c: float(s) if s else 1.0 for c, s in zip(num_cols, scaler.scale_)}
 
     dummied = pd.get_dummies(data, columns=cat_cols, dummy_na=False, dtype=int)
     dummied.columns = _safe_feature_names(dummied.columns)
@@ -581,6 +589,19 @@ def prepare_features(
             # show that a chosen column was discarded and why.
             "selected_by_user": requested,
             "imputation": {"numeric": numeric_strategy, "categorical": categorical_strategy},
+            # Everything needed to replay this preprocessing on unseen rows.
+            "preprocessor": {
+                "features": list(map(str, dummied.columns)),
+                "source_columns": sorted(set(num_cols) | set(cat_cols)),
+                "numeric": num_cols,
+                "categorical": cat_cols,
+                "fill_values": to_jsonable(fill_values),
+                "scaler_mean": scaler_mean,
+                "scaler_scale": scaler_scale,
+                "class_labels": class_labels,
+                "target": target,
+                "problem_type": problem_type,
+            },
             "source_columns": sorted(set(num_cols) | set(cat_cols)),
         }
     )
@@ -649,6 +670,25 @@ REGRESSION_MODELS: dict[str, Callable[[], Any]] = {
     "SVR": lambda: SVR(kernel="rbf", C=1.0),
 }
 
+# Estimators whose constructor accepts class_weight. Boosters and Naive Bayes
+# do not, so balancing simply does not apply to them.
+BALANCEABLE = {"Logistic Regression", "Decision Tree", "Random Forest",
+               "Extra Trees", "SVM"}
+
+
+def class_balance(y) -> dict[str, Any]:
+    """How lopsided the target is. 92% one class makes accuracy meaningless."""
+    counts = pd.Series(y).value_counts()
+    total = int(counts.sum()) or 1
+    share = float(counts.iloc[0]) / total
+    return {
+        "classes": int(len(counts)),
+        "largest_share": round(share, 4),
+        "imbalanced": bool(share >= 0.65 and len(counts) >= 2),
+        "counts": {str(k): int(v) for k, v in counts.head(12).items()},
+    }
+
+
 CLASSIFICATION_MODELS: dict[str, Callable[[], Any]] = {
     "Logistic Regression": lambda: LogisticRegression(max_iter=2000),
     "Decision Tree": lambda: DecisionTreeClassifier(max_depth=8, min_samples_leaf=5),
@@ -679,6 +719,7 @@ def train_model(
     X: pd.DataFrame,
     y: np.ndarray | None,
     random_state: int = 42,
+    balance_classes: bool = False,
 ) -> tuple[Any, float]:
     """Train a single model; returns (model, elapsed_seconds).
 
@@ -689,6 +730,11 @@ def train_model(
     if model_name not in registry:
         raise ValidationError(f"Unknown model '{model_name}' for {problem_type}.")
     model = registry[model_name]()
+    if balance_classes and model_name in BALANCEABLE:
+        try:
+            model.set_params(class_weight="balanced")
+        except (ValueError, TypeError):  # pragma: no cover - registry drift
+            pass
     fit_X, fit_y = X, y
     cap = _MAX_FIT_ROWS.get(model_name)
     if cap is not None and len(X) > cap:
@@ -832,25 +878,45 @@ def feature_importance(model: Any, X: pd.DataFrame, limit: int = 15) -> list[dic
     )
 
 
+# Below this many training rows a single hold-out split is small enough that
+# the leaderboard order is partly luck, so ranking uses cross-validation.
+CV_RANKING_MAX_ROWS = 5_000
+CV_RANKING_FOLDS = 5
+
+
 def compare_models(results: list[dict[str, Any]], problem_type: str) -> dict[str, Any]:
     key, direction = _PRIMARY_METRIC.get(problem_type, ("f1", "higher"))
     ok = [r for r in results if r.get("status") == "ok" and r.get("metrics")]
     if not ok:
         return {"ranked": [], "best": None, "metric_key": key}
+
+    # Prefer the cross-validated score when every model has one: on small data
+    # a 60-row test set can hand first place to whichever model got the kinder
+    # split, and that is exactly where these datasets live.
+    def _cv(r: dict[str, Any]) -> float | None:
+        # Kept inside `metrics` so it survives the database round-trip without
+        # a schema migration; model_results has no column for it.
+        return r.get("cv_score", r.get("metrics", {}).get("cv_score"))
+
+    by_cv = all(_cv(r) is not None for r in ok)
     ok = sorted(
         ok,
-        key=lambda r: r["metrics"].get(key) if r["metrics"].get(key) is not None else -1e18,
+        key=lambda r: (_cv(r) if by_cv else r["metrics"].get(key)) or -1e18,
         reverse=(direction == "higher"),
     )
     for i, r in enumerate(ok):
         r["rank"] = i + 1
     return {
+        "ranked_by": "cross_validation" if by_cv else "holdout",
+        "folds": CV_RANKING_FOLDS if by_cv else None,
         "ranked": [
             {
                 "rank": r["rank"],
                 "name": r["name"],
                 "primary_metric": r["metrics"].get(key),
                 "metrics": r["metrics"],
+                "cv_score": _cv(r),
+                "cv_std": r.get("cv_std", r.get("metrics", {}).get("cv_std")),
                 "training_seconds": r.get("training_seconds", 0.0),
             }
             for r in ok
@@ -951,3 +1017,31 @@ def model_factory(problem_type: str, model_name: str) -> Callable[[], Any] | Non
     estimator (hyperparameter search) rather than a fitted one."""
     registry = REGRESSION_MODELS if problem_type == "regression" else CLASSIFICATION_MODELS
     return registry.get(model_name)
+
+
+def cv_score(model_name: str, problem_type: str, X: pd.DataFrame, y: np.ndarray,
+             random_state: int = 42, balance_classes: bool = False) -> tuple[float, float] | None:
+    """Cross-validated score for one model, or None when it cannot be computed."""
+    from sklearn.model_selection import cross_val_score as _cvs
+
+    registry = REGRESSION_MODELS if problem_type == "regression" else CLASSIFICATION_MODELS
+    if model_name not in registry or y is None:
+        return None
+    if len(X) > CV_RANKING_MAX_ROWS or len(X) < CV_RANKING_FOLDS * 3:
+        return None
+    scoring = "r2" if problem_type == "regression" else "f1_macro"
+    if problem_type == "classification" and pd.Series(y).value_counts().min() < CV_RANKING_FOLDS:
+        return None
+    model = registry[model_name]()
+    if balance_classes and model_name in BALANCEABLE:
+        try:
+            model.set_params(class_weight="balanced")
+        except (ValueError, TypeError):
+            pass
+    try:
+        scores = _cvs(model, X, y, cv=CV_RANKING_FOLDS, scoring=scoring, n_jobs=-1)
+    except Exception:
+        return None
+    if not np.isfinite(scores).all():
+        return None
+    return float(np.mean(scores)), float(np.std(scores))

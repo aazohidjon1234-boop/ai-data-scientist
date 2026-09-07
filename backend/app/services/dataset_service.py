@@ -157,3 +157,40 @@ def clear_ml_state(db: Session, ds: Dataset) -> None:
     db.execute(ModelResult.__table__.delete().where(ModelResult.dataset_id == ds.id))
     ds.ml_run = None
     db.flush()
+
+
+def delete_dataset(db: Session, dataset_id: str) -> dict[str, Any]:
+    """Remove a dataset and everything it produced.
+
+    Without this, model folders accumulate indefinitely — 446 of them and 3.7 GB
+    had built up before there was any way to remove one.
+    """
+    import shutil
+
+    ds = get_dataset_or_404(db, dataset_id)
+    settings = get_settings()
+    freed = 0
+    removed: list[str] = []
+
+    csv_dir = Path(ds.file_path).resolve().parent
+    uploads = Path(settings.upload_subdir).resolve()
+    # Only ever inside the uploads root, and never the root itself.
+    if uploads in csv_dir.parents and csv_dir.exists():
+        freed += sum(f.stat().st_size for f in csv_dir.rglob("*") if f.is_file())
+        shutil.rmtree(csv_dir, ignore_errors=True)
+        removed.append("uploaded file")
+
+    model_dir = Path(settings.model_dir).resolve() / ds.id
+    if model_dir.exists() and model_dir.parent == Path(settings.model_dir).resolve():
+        freed += sum(f.stat().st_size for f in model_dir.rglob("*") if f.is_file())
+        shutil.rmtree(model_dir, ignore_errors=True)
+        removed.append("saved models")
+
+    name = ds.name
+    db.delete(ds)          # analyses / model results / reports cascade
+    db.commit()
+    from ..utils.dataframe_store import clear_cache
+
+    clear_cache()
+    return {"ok": True, "id": dataset_id, "name": name,
+            "removed": removed, "freed_bytes": freed}

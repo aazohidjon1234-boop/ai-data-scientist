@@ -98,9 +98,12 @@ export interface ModelResult {
   is_best: boolean;
   download_url?: string | null;
   rank?: number | null;
+  cv_score?: number | null;
+  cv_std?: number | null;
 }
 
 export interface ModelRun {
+  ranked_by?: string;
   features_used?: string[] | null;
   source_columns?: string[];
   drop_outliers?: boolean;
@@ -374,4 +377,22 @@ export interface PipelineProgress {
   stage_elapsed: number;
   finished: boolean;
   error: string | null;
+}
+
+
+export interface PredictSchema {
+  model: string;
+  target: string | null;
+  problem_type: ProblemType;
+  required_columns: string[];
+  class_labels: string[] | null;
+  example_row: Record<string, unknown>;
+}
+
+export interface PredictResult {
+  model: string;
+  target: string | null;
+  rows: number;
+  predictions: (string | number)[];
+  confidence: Record<string, number>[] | null;
 }

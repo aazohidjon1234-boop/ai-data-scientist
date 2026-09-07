@@ -176,6 +176,7 @@ class DataScientistAgent:
         impute_numeric: str = "median",
         impute_categorical: str = "mode",
         engineered: list[dict[str, Any]] | None = None,
+        balance_classes: bool = False,
     ) -> dict[str, Any]:
         settings = self.settings
         trace = AgentTrace()
@@ -278,6 +279,9 @@ class DataScientistAgent:
             "sampled": sampled,
             "outliers_dropped": outlier_report,
             "engineered_columns": engineered_names,
+            "class_balance": (data_tools.class_balance(y)
+                              if ptype == "classification" and y is not None else None),
+            "balanced_weights": bool(balance_classes and ptype == "classification"),
             "split": f"train {int((1 - settings.train_test_ratio) * 100)}% / test {int(settings.train_test_ratio * 100)}%",
             "class_labels": prep_report.get("class_labels"),
         }
@@ -372,7 +376,8 @@ class DataScientistAgent:
                 try:
                     with self._step(trace, "train_model", {"model": model_name}) as tt:
                         model_obj, elapsed = data_tools.train_model(
-                            model_name, ptype, X_train, y_train, settings.random_state
+                            model_name, ptype, X_train, y_train, settings.random_state,
+                            balance_classes=balance_classes
                         )
                         tt.ok(f"Trained in {elapsed:.2f}s")
                     self._save_artifact(model_name, model_obj)
@@ -384,6 +389,11 @@ class DataScientistAgent:
                         )
                         primary = metrics.get(metrics.get("primary_metric", "r2"))
                         tt.ok(f"{metrics['primary_metric']}={primary:.4f}")
+                    scored = data_tools.cv_score(model_name, ptype, X_train, y_train,
+                                                 settings.random_state, balance_classes)
+                    if scored is not None:
+                        metrics["cv_score"] = round(scored[0], 6)
+                        metrics["cv_std"] = round(scored[1], 6)
                     results.append({
                         "name": model_name,
                         "model_type": ptype,
@@ -393,6 +403,11 @@ class DataScientistAgent:
                     })
                 except Exception as e:  # noqa: BLE001 — one bad model must not kill the run
                     trace.record("train_model", {"model": model_name}, status="failed", error=str(e)[:300])
+                    scored = data_tools.cv_score(model_name, ptype, X_train, y_train,
+                                                 settings.random_state, balance_classes)
+                    if scored is not None:
+                        metrics["cv_score"] = round(scored[0], 6)
+                        metrics["cv_std"] = round(scored[1], 6)
                     results.append({
                         "name": model_name,
                         "model_type": ptype,

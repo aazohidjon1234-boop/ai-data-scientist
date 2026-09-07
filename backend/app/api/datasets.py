@@ -30,6 +30,7 @@ from ..schemas.api import (
     ModelResultOut,
     ModelRunOut,
     PivotRequest,
+    PredictRequest,
     ReportOut,
     SampleInfo,
     SegmentRequest,
@@ -46,6 +47,7 @@ from ..services import (
     chat_service,
     dataset_service,
     ml_service,
+    predict_service,
     report_service,
 )
 
@@ -106,6 +108,8 @@ def _training_out(db: Session, ds: Dataset) -> dict[str, Any] | None:
     models = []
     for m in t["models"]:
         m = dict(m)
+        m["cv_score"] = (m.get("metrics") or {}).get("cv_score")
+        m["cv_std"] = (m.get("metrics") or {}).get("cv_std")
         m["download_url"] = (
             f"/api/datasets/{ds.id}/models/{model_slug(m['name'])}/download"
             if m.get("status") == "ok"
@@ -193,6 +197,12 @@ def get_dataset(dataset_id: str, db: Session = Depends(get_db)):
     }
 
 
+@router.delete("/datasets/{dataset_id}")
+def delete_dataset(dataset_id: str, db: Session = Depends(get_db)):
+    """Delete the dataset, its uploaded file and its saved models."""
+    return dataset_service.delete_dataset(db, dataset_id)
+
+
 @router.post("/datasets/{dataset_id}/analyze", response_model=AnalysisOut)
 def analyze(dataset_id: str, body: AnalyzeRequest | None = None, db: Session = Depends(get_db)):
     _get_ds(db, dataset_id)  # 404 check
@@ -213,7 +223,8 @@ def train(dataset_id: str, body: TrainRequest | None = None, db: Session = Depen
                                      tune=body.tune,
                                      impute_numeric=body.impute_numeric,
                                      impute_categorical=body.impute_categorical,
-                                     engineered=body.engineered)
+                                     engineered=body.engineered,
+                                     balance_classes=body.balance_classes)
     db.refresh(ds)
     return _training_out(db, ds)
 
@@ -286,6 +297,26 @@ def get_trend(dataset_id: str, body: TrendRequest | None = None, db: Session = D
 @router.post("/datasets/{dataset_id}/segments")
 def get_segments(dataset_id: str, body: SegmentRequest, db: Session = Depends(get_db)):
     return to_jsonable(analyst_service.segments(db, dataset_id, body.dimension, body.metric))
+
+
+@router.get("/datasets/{dataset_id}/predict/schema")
+def predict_schema(dataset_id: str, db: Session = Depends(get_db)):
+    """Which columns a prediction needs, plus an example row."""
+    return predict_service.required_inputs(db, dataset_id)
+
+
+@router.post("/datasets/{dataset_id}/predict")
+def predict(dataset_id: str, body: PredictRequest, db: Session = Depends(get_db)):
+    return predict_service.predict(db, dataset_id, body.rows, body.model_name)
+
+
+@router.post("/datasets/{dataset_id}/predict/csv")
+async def predict_csv(dataset_id: str, file: UploadFile = File(...),
+                      db: Session = Depends(get_db)):
+    from ..core.security import read_validated_csv
+
+    content, _name = await read_validated_csv(file)
+    return predict_service.predict_csv(db, dataset_id, content)
 
 
 @router.get("/datasets/{dataset_id}/progress")
